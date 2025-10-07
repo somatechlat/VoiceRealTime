@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OVOS Voice Agent - Sprint 1 Test Client</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .status.connected { background: #d4edda; color: #155724; }
+        .status.disconnected { background: #f8d7da; color: #721c24; }
+        .status.recording { background: #fff3cd; color: #856404; }
+        .controls {
+            margin: 20px 0;
+        }
+        button {
+            padding: 12px 24px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .primary { background: #007bff; color: white; }
+        .success { background: #28a745; color: white; }
+        .danger { background: #dc3545; color: white; }
+        .warning { background: #ffc107; color: #212529; }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 15px;
+            border-radius: 5px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .audio-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 OVOS Voice Agent - Test Client</h1>
+        <p>Sprint 1: Real-time WebSocket Audio Streaming</p>
+        
+        <div id="status" class="status disconnected">Disconnected</div>
+        
+        <div class="controls">
+            <button id="connectBtn" class="primary" onclick="connect()">Connect</button>
+            <button id="disconnectBtn" class="danger" onclick="disconnect()" disabled>Disconnect</button>
+            <button id="createSessionBtn" class="success" onclick="createSession()">Create Session</button>
+        </div>
+        
+        <div class="audio-controls">
+            <div>
+                <h3>🎙️ Recording</h3>
+                <button id="startRecordBtn" class="success" onclick="startRecording()" disabled>Start Recording</button>
+                <button id="stopRecordBtn" class="danger" onclick="stopRecording()" disabled>Stop Recording</button>
+                <p>Session ID: <span id="sessionId">None</span></p>
+            </div>
+            <div>
+                <h3>📊 Audio Info</h3>
+                <p>Buffer Size: <span id="bufferSize">0</span> bytes</p>
+                <p>Recording Time: <span id="recordingTime">0</span>s</p>
+                <p>Sample Rate: <span id="sampleRate">44100</span> Hz</p>
+            </div>
+        </div>
+        
+        <h3>📝 Message Log</h3>
+        <div id="log" class="log">Waiting for connection...</div>
+        
+        <div class="controls">
+            <button onclick="clearLog()" class="warning">Clear Log</button>
+            <button onclick="pingServer()" class="primary" disabled id="pingBtn">Ping Server</button>
+        </div>
+    </div>
+
+    <script>
+        let websocket = null;
+        let sessionId = null;
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let recordingStartTime = null;
+        let recordingTimer = null;
+        
+        const statusEl = document.getElementById('status');
+        const logEl = document.getElementById('log');
+        const sessionIdEl = document.getElementById('sessionId');
+        const bufferSizeEl = document.getElementById('bufferSize');
+        const recordingTimeEl = document.getElementById('recordingTime');
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            logEl.textContent += `[${timestamp}] ${message}\n`;
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+        
+        async function createSession() {
+            try {
+                const response = await fetch('/sessions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        user_id: 'test_user',
+                        config: {}
+                    })
+                });
+                
+                const data = await response.json();
+                sessionId = data.session_id;
+                sessionIdEl.textContent = sessionId;
+                log(`Session created: ${sessionId}`);
+                
+                document.getElementById('connectBtn').disabled = false;
+                
+            } catch (error) {
+                log(`Error creating session: ${error}`);
+            }
+        }
+        
+        function connect() {
+            if (!sessionId) {
+                alert('Please create a session first');
+                return;
+            }
+            
+            const wsUrl = `ws://localhost:8000/ws/${sessionId}`;
+            websocket = new WebSocket(wsUrl);
+            
+            websocket.onopen = function(event) {
+                statusEl.textContent = 'Connected';
+                statusEl.className = 'status connected';
+                log('WebSocket connected');
+                
+                document.getElementById('connectBtn').disabled = true;
+                document.getElementById('disconnectBtn').disabled = false;
+                document.getElementById('startRecordBtn').disabled = false;
+                document.getElementById('pingBtn').disabled = false;
+            };
+            
+            websocket.onmessage = function(event) {
+                const message = JSON.parse(event.data);
+                handleMessage(message);
+            };
+            
+            websocket.onclose = function(event) {
+                statusEl.textContent = 'Disconnected';
+                statusEl.className = 'status disconnected';
+                log('WebSocket disconnected');
+                
+                document.getElementById('connectBtn').disabled = false;
+                document.getElementById('disconnectBtn').disabled = true;
+                document.getElementById('startRecordBtn').disabled = true;
+                document.getElementById('stopRecordBtn').disabled = true;
+                document.getElementById('pingBtn').disabled = true;
+            };
+            
+            websocket.onerror = function(error) {
+                log(`WebSocket error: ${error}`);
+            };
+        }
+        
+        function disconnect() {
+            if (websocket) {
+                websocket.close();
+            }
+        }
+        
+        function handleMessage(message) {
+            log(`Received: ${JSON.stringify(message, null, 2)}`);
+            
+            switch (message.type) {
+                case 'connection_established':
+                    log('Connection established successfully');
+                    break;
+                case 'audio_received':
+                    bufferSizeEl.textContent = message.buffer_size;
+                    break;
+                case 'conversation_started':
+                    log('Conversation started');
+                    break;
+                case 'conversation_ended':
+                    log('Conversation ended');
+                    break;
+                case 'pong':
+                    log('Pong received');
+                    break;
+            }
+        }
+        
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: {
+                        sampleRate: 44100,
+                        channelCount: 1,
+                        echoCancellation: true,
+                        noiseSuppression: true
+                    } 
+                });
+                
+                mediaRecorder = new MediaRecorder(stream, {
+                    mimeType: 'audio/webm;codecs=opus'
+                });
+                
+                audioChunks = [];
+                
+                mediaRecorder.ondataavailable = function(event) {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                        sendAudioChunk(event.data);
+                    }
+                };
+                
+                mediaRecorder.start(250); // Send chunks every 250ms
+                recordingStartTime = Date.now();
+                
+                // Start timer
+                recordingTimer = setInterval(() => {
+                    const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+                    recordingTimeEl.textContent = elapsed;
+                }, 1000);
+                
+                statusEl.textContent = 'Recording';
+                statusEl.className = 'status recording';
+                
+                document.getElementById('startRecordBtn').disabled = true;
+                document.getElementById('stopRecordBtn').disabled = false;
+                
+                // Send start conversation message
+                websocket.send(JSON.stringify({
+                    type: 'start_conversation',
+                    session_id: sessionId
+                }));
+                
+                log('Recording started');
+                
+            } catch (error) {
+                log(`Error starting recording: ${error}`);
+            }
+        }
+        
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                
+                clearInterval(recordingTimer);
+                
+                statusEl.textContent = 'Connected';
+                statusEl.className = 'status connected';
+                
+                document.getElementById('startRecordBtn').disabled = false;
+                document.getElementById('stopRecordBtn').disabled = true;
+                
+                // Send end conversation message
+                websocket.send(JSON.stringify({
+                    type: 'end_conversation',
+                    session_id: sessionId
+                }));
+                
+                log('Recording stopped');
+            }
+        }
+        
+        function sendAudioChunk(audioData) {
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                const reader = new FileReader();
+                reader.onload = function() {
+                    const arrayBuffer = reader.result;
+                    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+                    
+                    websocket.send(JSON.stringify({
+                        type: 'audio_chunk',
+                        session_id: sessionId,
+                        audio_data: base64,
+                        metadata: {
+                            timestamp: Date.now(),
+                            size: audioData.size
+                        }
+                    }));
+                };
+                reader.readAsArrayBuffer(audioData);
+            }
+        }
+        
+        function pingServer() {
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                websocket.send(JSON.stringify({
+                    type: 'ping',
+                    timestamp: Date.now()
+                }));
+            }
+        }
+        
+        function clearLog() {
+            logEl.textContent = '';
+        }
+        
+        // Initialize
+        log('OVOS Voice Agent Test Client Ready');
+        log('Click "Create Session" to start');
+    </script>
+</body>
+</html>
