@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OVOS Voice Chat - Simple Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .chat-container {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .status {
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        
+        .status.disconnected {
+            background: #ffebee;
+            color: #c62828;
+            border: 2px solid #ef5350;
+        }
+        
+        .status.connected {
+            background: #e8f5e8;
+            color: #2e7d32;
+            border: 2px solid #4caf50;
+        }
+        
+        .status.listening {
+            background: #fff3e0;
+            color: #ef6c00;
+            border: 2px solid #ff9800;
+            animation: pulse 1.5s infinite;
+        }
+        
+        .status.thinking {
+            background: #e3f2fd;
+            color: #1565c0;
+            border: 2px solid #2196f3;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        .talk-button {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: none;
+            font-size: 40px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 20px 0;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+        }
+        
+        .talk-button.ready {
+            background: linear-gradient(135deg, #4caf50, #45a049);
+            color: white;
+        }
+        
+        .talk-button.ready:hover {
+            transform: scale(1.1);
+            box-shadow: 0 12px 25px rgba(0,0,0,0.3);
+        }
+        
+        .talk-button.listening {
+            background: linear-gradient(135deg, #ff5722, #e64a19);
+            color: white;
+            animation: pulse 1s infinite;
+        }
+        
+        .talk-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .conversation {
+            text-align: left;
+            max-height: 300px;
+            overflow-y: auto;
+            margin: 20px 0;
+            padding: 15px;
+            background: #f5f5f5;
+            border-radius: 10px;
+            border: 1px solid #ddd;
+        }
+        
+        .message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 8px;
+            max-width: 80%;
+        }
+        
+        .message.user {
+            background: #2196f3;
+            color: white;
+            margin-left: auto;
+            text-align: right;
+        }
+        
+        .message.assistant {
+            background: #4caf50;
+            color: white;
+            margin-right: auto;
+        }
+        
+        .controls {
+            margin-top: 20px;
+        }
+        
+        .controls button {
+            padding: 8px 16px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            background: #f0f0f0;
+            border: 1px solid #ccc;
+        }
+        
+        .controls button:hover {
+            background: #e0e0e0;
+        }
+        
+        .instructions {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-size: 14px;
+            color: #1565c0;
+        }
+        
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            border: 1px solid #ef5350;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <h1>🎤 OVOS Voice Chat</h1>
+        <p class="subtitle">Click the button and start talking!</p>
+        
+        <div id="status" class="status disconnected">
+            Click "Connect" to start
+        </div>
+        
+        <div class="instructions">
+            <strong>How to use:</strong><br>
+            1. Click "Connect" to connect to OVOS<br>
+            2. Click the 🎤 button and start talking<br>
+            3. Click again to stop and get a response
+        </div>
+        
+        <div id="error" class="error" style="display: none;"></div>
+        
+        <button id="talkButton" class="talk-button ready" onclick="toggleRecording()" disabled>
+            🎤
+        </button>
+        
+        <div class="conversation" id="conversation">
+            <div style="text-align: center; color: #999; font-style: italic;">
+                Your conversation will appear here...
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button onclick="connect()" id="connectBtn">Connect to OVOS</button>
+            <button onclick="disconnect()" id="disconnectBtn" disabled>Disconnect</button>
+            <button onclick="clearChat()">Clear Chat</button>
+            <button onclick="testConnection()">Test Connection</button>
+        </div>
+    </div>
+
+    <script>
+        let websocket = null;
+        let isRecording = false;
+        let mediaRecorder = null;
+        let recordingStream = null;
+        
+        const statusEl = document.getElementById('status');
+        const talkButton = document.getElementById('talkButton');
+        const conversationEl = document.getElementById('conversation');
+        const errorEl = document.getElementById('error');
+        
+        function updateStatus(message, type) {
+            statusEl.textContent = message;
+            statusEl.className = `status ${type}`;
+        }
+        
+        function showError(message) {
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+            setTimeout(() => {
+                errorEl.style.display = 'none';
+            }, 5000);
+        }
+        
+        function addMessage(role, content) {
+            // Clear placeholder
+            if (conversationEl.children.length === 1 && conversationEl.children[0].style.textAlign === 'center') {
+                conversationEl.innerHTML = '';
+            }
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+            messageDiv.textContent = content;
+            conversationEl.appendChild(messageDiv);
+            conversationEl.scrollTop = conversationEl.scrollHeight;
+        }
+        
+        async function connect() {
+            try {
+                updateStatus('Connecting...', 'thinking');
+                
+                // Connect to local OVOS WebSocket server
+                websocket = new WebSocket('ws://localhost:8001/v1/realtime');
+                
+                websocket.onopen = function() {
+                    updateStatus('✅ Connected to OVOS!', 'connected');
+                    talkButton.disabled = false;
+                    document.getElementById('connectBtn').disabled = true;
+                    document.getElementById('disconnectBtn').disabled = false;
+                    
+                    console.log('Connected to OVOS voice agent');
+                };
+                
+                websocket.onmessage = function(event) {
+                    const message = JSON.parse(event.data);
+                    handleOVOSMessage(message);
+                };
+                
+                websocket.onclose = function() {
+                    updateStatus('❌ Disconnected', 'disconnected');
+                    talkButton.disabled = true;
+                    document.getElementById('connectBtn').disabled = false;
+                    document.getElementById('disconnectBtn').disabled = true;
+                    
+                    if (isRecording) {
+                        stopRecording();
+                    }
+                };
+                
+                websocket.onerror = function(error) {
+                    showError('Connection failed! Make sure OVOS server is running on port 8001');
+                    console.error('WebSocket error:', error);
+                };
+                
+            } catch (error) {
+                showError('Failed to connect: ' + error.message);
+                updateStatus('❌ Connection failed', 'disconnected');
+            }
+        }
+        
+        function disconnect() {
+            if (websocket) {
+                websocket.close();
+                websocket = null;
+            }
+        }
+        
+        function handleOVOSMessage(message) {
+            console.log('OVOS message:', message);
+            
+            switch (message.type) {
+                case 'session.created':
+                    console.log('Session created:', message.session.id);
+                    // Configure session for voice chat
+                    sendMessage({
+                        type: 'session.update',
+                        session: {
+                            voice: 'default',
+                            turn_detection: {
+                                type: 'server_vad',
+                                threshold: 0.5
+                            }
+                        }
+                    });
+                    break;
+                    
+                case 'input_audio_buffer.speech_started':
+                    updateStatus('🎤 Listening...', 'listening');
+                    break;
+                    
+                case 'input_audio_buffer.speech_stopped':
+                    updateStatus('🤔 Processing...', 'thinking');
+                    break;
+                    
+                case 'conversation.item.created':
+                    if (message.item.role === 'user') {
+                        const transcript = message.item.content[0]?.transcript || 'Voice message';
+                        addMessage('user', transcript);
+                    }
+                    break;
+                    
+                case 'response.audio_transcript.delta':
+                case 'response.done':
+                    if (message.response && message.response.output) {
+                        const assistantMessage = message.response.output[0]?.content[0]?.transcript;
+                        if (assistantMessage) {
+                            addMessage('assistant', assistantMessage);
+                            updateStatus('✅ Response complete', 'connected');
+                        }
+                    }
+                    break;
+                    
+                case 'error':
+                    showError('OVOS Error: ' + message.error.message);
+                    updateStatus('❌ Error occurred', 'disconnected');
+                    break;
+            }
+        }
+        
+        function sendMessage(message) {
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                websocket.send(JSON.stringify(message));
+            }
+        }
+        
+        async function toggleRecording() {
+            if (!isRecording) {
+                await startRecording();
+            } else {
+                await stopRecording();
+            }
+        }
+        
+        async function startRecording() {
+            try {
+                // Get microphone access
+                recordingStream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: {
+                        sampleRate: 24000,
+                        channelCount: 1,
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+                
+                mediaRecorder = new MediaRecorder(recordingStream);
+                
+                mediaRecorder.ondataavailable = function(event) {
+                    if (event.data.size > 0) {
+                        sendAudioChunk(event.data);
+                    }
+                };
+                
+                mediaRecorder.start(100); // Send chunks every 100ms
+                
+                isRecording = true;
+                talkButton.textContent = '⏹️';
+                talkButton.className = 'talk-button listening';
+                updateStatus('🎤 Recording... Click to stop', 'listening');
+                
+            } catch (error) {
+                showError('Microphone access denied or not available');
+                console.error('Recording error:', error);
+            }
+        }
+        
+        async function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+            
+            if (recordingStream) {
+                recordingStream.getTracks().forEach(track => track.stop());
+                recordingStream = null;
+            }
+            
+            isRecording = false;
+            talkButton.textContent = '🎤';
+            talkButton.className = 'talk-button ready';
+            updateStatus('📤 Sending audio...', 'thinking');
+            
+            // Commit the audio buffer for processing
+            sendMessage({
+                type: 'input_audio_buffer.commit'
+            });
+            
+            // Request response generation
+            setTimeout(() => {
+                sendMessage({
+                    type: 'response.create'
+                });
+            }, 500);
+        }
+        
+        function sendAudioChunk(audioData) {
+            const reader = new FileReader();
+            reader.onload = function() {
+                const arrayBuffer = reader.result;
+                const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+                
+                sendMessage({
+                    type: 'input_audio_buffer.append',
+                    audio: base64
+                });
+            };
+            reader.readAsArrayBuffer(audioData);
+        }
+        
+        function clearChat() {
+            conversationEl.innerHTML = '<div style="text-align: center; color: #999; font-style: italic;">Your conversation will appear here...</div>';
+        }
+        
+        async function testConnection() {
+            try {
+                const response = await fetch('http://localhost:8001/health');
+                const data = await response.json();
+                
+                if (data.status === 'healthy') {
+                    updateStatus('✅ Server is running!', 'connected');
+                } else {
+                    showError('Server is not healthy');
+                }
+            } catch (error) {
+                showError('Server is not running! Start the OVOS server first.');
+            }
+        }
+        
+        // Auto-test connection on page load
+        window.addEventListener('load', () => {
+            setTimeout(testConnection, 1000);
+        });
+    </script>
+</body>
+</html>
