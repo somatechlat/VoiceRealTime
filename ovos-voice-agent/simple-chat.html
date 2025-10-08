@@ -141,6 +141,16 @@
             margin-right: auto;
         }
         
+        .message.system {
+            background: #f5f5f5;
+            color: #666;
+            margin: 2px auto;
+            border-left: 3px solid #2196f3;
+            padding: 5px 10px;
+            font-size: 14px;
+            border-radius: 3px;
+        }
+        
         .controls {
             margin-top: 20px;
         }
@@ -256,7 +266,7 @@
                 updateStatus('Connecting...', 'thinking');
                 
                 // Connect to local OVOS WebSocket server
-                websocket = new WebSocket('ws://localhost:8001/v1/realtime');
+                websocket = new WebSocket('ws://localhost:65000/v1/realtime');
                 
                 websocket.onopen = function() {
                     updateStatus('✅ Connected to OVOS!', 'connected');
@@ -284,7 +294,7 @@
                 };
                 
                 websocket.onerror = function(error) {
-                    showError('Connection failed! Make sure OVOS server is running on port 8001');
+                    showError('Connection failed! Make sure OVOS server is running on port 65000');
                     console.error('WebSocket error:', error);
                 };
                 
@@ -304,9 +314,13 @@
         function handleOVOSMessage(message) {
             console.log('OVOS message:', message);
             
+            // Add system message for every event (for debugging)
+            addSystemMessage(`📡 Event: ${message.type}`);
+            
             switch (message.type) {
                 case 'session.created':
                     console.log('Session created:', message.session.id);
+                    addSystemMessage(`🔗 Session created: ${message.session.id}`);
                     // Configure session for voice chat
                     sendMessage({
                         type: 'session.update',
@@ -322,26 +336,87 @@
                     
                 case 'input_audio_buffer.speech_started':
                     updateStatus('🎤 Listening...', 'listening');
+                    addSystemMessage('🎤 Started listening to your voice...');
                     break;
                     
                 case 'input_audio_buffer.speech_stopped':
                     updateStatus('🤔 Processing...', 'thinking');
+                    addSystemMessage('🛑 Stopped listening - processing speech...');
+                    break;
+                    
+                case 'input_audio_buffer.append':
+                    // Show that audio data is being received
+                    addSystemMessage('📊 Receiving audio data...');
+                    break;
+                    
+                case 'input_audio_buffer.commit':
+                    addSystemMessage('✅ Audio buffer committed - starting transcription...');
                     break;
                     
                 case 'conversation.item.created':
                     if (message.item.role === 'user') {
                         const transcript = message.item.content[0]?.transcript || 'Voice message';
                         addMessage('user', transcript);
+                        addSystemMessage(`👤 User speech transcribed: "${transcript}"`);
+                    }
+                    break;
+                    
+                case 'response.created':
+                    addSystemMessage('🧠 AI is generating response...');
+                    updateStatus('🧠 AI thinking...', 'thinking');
+                    break;
+                    
+                case 'response.output_item.added':
+                    if (message.item && message.item.content && message.item.content[0]) {
+                        const aiText = message.item.content[0].transcript || message.item.content[0].text;
+                        if (aiText) {
+                            addMessage('assistant', aiText);
+                            addSystemMessage(`🤖 AI responded: "${aiText}"`);
+                        }
                     }
                     break;
                     
                 case 'response.audio_transcript.delta':
+                    // Handle streaming text response from OpenAI API
+                    if (message.delta) {
+                        addMessage('assistant', message.delta);
+                        addSystemMessage(`📝 AI transcript: "${message.delta}"`);
+                    }
+                    break;
+                    
+                case 'response.audio.delta':
+                    addSystemMessage('🔊 Receiving audio response data...');
+                    // TODO: Play audio when implemented
+                    break;
+                    
+                case 'response.audio.done':
+                    addSystemMessage('✅ Audio response complete');
+                    break;
+                    
+                case 'input_audio_buffer.speech_started':
+                    updateStatus('🎤 Voice detected - listening...', 'listening');
+                    addSystemMessage('🎤 Voice activity detected - started listening...');
+                    break;
+                    
+                case 'input_audio_buffer.speech_stopped':
+                    updateStatus('🛑 Voice stopped - processing...', 'thinking');
+                    addSystemMessage('🛑 Voice activity ended - processing speech...');
+                    break;
+                    
+                case 'input_audio_buffer.committed':
+                    addSystemMessage('✅ Audio committed - transcribing...');
+                    break;
+                    
                 case 'response.done':
+                    updateStatus('✅ Response complete', 'connected');
+                    addSystemMessage('🎉 Full response cycle complete!');
+                    
+                    // Also try to extract response from the done event
                     if (message.response && message.response.output) {
                         const assistantMessage = message.response.output[0]?.content[0]?.transcript;
                         if (assistantMessage) {
                             addMessage('assistant', assistantMessage);
-                            updateStatus('✅ Response complete', 'connected');
+                            addSystemMessage(`🤖 Final AI response: "${assistantMessage}"`);
                         }
                     }
                     break;
@@ -349,8 +424,28 @@
                 case 'error':
                     showError('OVOS Error: ' + message.error.message);
                     updateStatus('❌ Error occurred', 'disconnected');
+                    addSystemMessage(`❌ Error: ${message.error.message}`);
+                    break;
+                    
+                default:
+                    addSystemMessage(`❓ Unknown event: ${message.type}`);
                     break;
             }
+        }
+        
+        // Add system message function for debugging
+        function addSystemMessage(text) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message system';
+            messageDiv.innerHTML = `
+                <div class="message-content">
+                    <small style="color: #666; font-size: 12px;">${new Date().toLocaleTimeString()}</small><br>
+                    <span style="color: #888; font-style: italic;">${text}</span>
+                </div>
+            `;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
         
         function sendMessage(message) {
@@ -367,18 +462,22 @@
             }
         }
         
+        let recordingTimeout;
+        
         async function startRecording() {
             try {
                 // Get microphone access
                 recordingStream = await navigator.mediaDevices.getUserMedia({ 
-                    audio: {
-                        sampleRate: 24000,
-                        channelCount: 1,
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                        autoGainControl: true
-                    }
+                    audio: true 
                 });
+                
+                // Auto-stop recording after 10 seconds
+                recordingTimeout = setTimeout(() => {
+                    if (isRecording) {
+                        console.log('Auto-stopping recording after timeout');
+                        stopRecording();
+                    }
+                }, 10000);
                 
                 mediaRecorder = new MediaRecorder(recordingStream);
                 
@@ -402,6 +501,12 @@
         }
         
         async function stopRecording() {
+            // Clear the timeout
+            if (recordingTimeout) {
+                clearTimeout(recordingTimeout);
+                recordingTimeout = null;
+            }
+            
             if (mediaRecorder && mediaRecorder.state !== 'inactive') {
                 mediaRecorder.stop();
             }
@@ -449,7 +554,7 @@
         
         async function testConnection() {
             try {
-                const response = await fetch('http://localhost:8001/health');
+                const response = await fetch('http://localhost:65000/health');
                 const data = await response.json();
                 
                 if (data.status === 'healthy') {

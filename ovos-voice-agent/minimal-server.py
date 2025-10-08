@@ -222,8 +222,8 @@ class MinimalEventProcessor:
                 "status": "completed",
                 "role": "assistant",
                 "content": [{
-                    "type": "text",
-                    "text": ai_response
+                    "type": "audio",
+                    "transcript": ai_response  # Browser looks for 'transcript' field
                 }]
             }
             
@@ -234,7 +234,34 @@ class MinimalEventProcessor:
                 "output_index": 0,
                 "item": response_item
             })
+
+            # Generate fake audio response (simple beep pattern)
+            # In a real implementation, this would use TTS
+            import base64
             
+            # Create a simple audio buffer (silence/beep pattern)
+            fake_audio_data = b'\x00' * 1024  # 1KB of silence
+            audio_b64 = base64.b64encode(fake_audio_data).decode('utf-8')
+            
+            # Send audio response
+            await self.manager.send_event(session_id, {
+                "type": "response.audio.delta",
+                "response_id": response_id,
+                "item_id": item_id,
+                "output_index": 0,
+                "content_index": 0,
+                "delta": audio_b64
+            })
+            
+            # Send audio done
+            await self.manager.send_event(session_id, {
+                "type": "response.audio.done",
+                "response_id": response_id,
+                "item_id": item_id,
+                "output_index": 0,
+                "content_index": 0
+            })
+
             await self.manager.send_event(session_id, {
                 "type": "response.done",
                 "response": {
@@ -243,9 +270,7 @@ class MinimalEventProcessor:
                     "status": "completed",
                     "output": [response_item]
                 }
-            })
-            
-            # Store response in conversation
+            })            # Store response in conversation
             self.conversations[session_id].append(response_item)
             
         except Exception as e:
@@ -301,13 +326,13 @@ async def health_check():
 
 if __name__ == "__main__":
     print("🎤 OVOS Minimal Voice Agent - Starting...")
-    print("🌐 WebSocket: ws://localhost:8001/v1/realtime")
-    print("📋 Health: http://localhost:8001/health")
+    print("🌐 WebSocket: ws://localhost:65000/v1/realtime")
+    print("📋 Health: http://localhost:65000/health")
     print("✅ Ready for voice chat testing!")
     
     uvicorn.run(
         app,
         host="0.0.0.0",
-        port=8001,
+        port=65000,
         log_level="info"
     )
