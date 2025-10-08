@@ -1,0 +1,127 @@
+version: "3.9"
+
+services:
+  voice-engine-api:
+    build:
+      context: ..
+      dockerfile: enterprise/Dockerfile
+    image: ovos/voice-engine-api:latest
+    env_file:
+      - ./settings.docker.env
+    environment:
+      APP_SECRET_KEY: ${APP_SECRET_KEY:-change-me}
+      DATABASE__URI: postgresql+psycopg://voice_agent:voice_agent@db:5432/voice_agent
+      KAFKA__BOOTSTRAP_SERVERS: kafka:9092
+      OPA__URL: http://opa:8181
+    depends_on:
+      db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      opa:
+        condition: service_started
+    # Expose the API on a fixed host port 20000 (container still listens on 8000)
+    ports:
+      - "20000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    volumes:
+      - voice-engine-data:/app/data
+      - ./policies:/app/policies:ro
+    networks:
+      - voice-engine
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: voice_agent
+      POSTGRES_PASSWORD: voice_agent
+      POSTGRES_DB: voice_agent
+    # No host port exposure; internal services connect via the Docker network
+    # ports: []
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U voice_agent -d voice_agent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - voice-engine
+
+  kafka:
+    # Updated to a known tag; bitnami/kafka:latest is available on Docker Hub
+    image: bitnami/kafka:latest
+    environment:
+      - KAFKA_ENABLE_KRAFT=yes
+      - KAFKA_CFG_NODE_ID=1
+      - KAFKA_CFG_PROCESS_ROLES=broker,controller
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+      - KAFKA_CFG_NUM_PARTITIONS=1
+      - KAFKA_CFG_LOG_DIRS=/bitnami/kafka/data
+      - ALLOW_PLAINTEXT_LISTENER=yes
+    # Host port mapping removed – services use internal Docker network
+    # ports: []
+    volumes:
+      - kafka-data:/bitnami/kafka
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "-c",
+          "/opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list > /dev/null 2>&1",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - voice-engine
+
+  opa:
+    image: openpolicyagent/opa:0.64.1
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "--log-level=info"
+      - "/policies"
+    volumes:
+      - ./policies:/policies:ro
+    # Host port mapping removed – internal services access OPA via its Docker name
+    # ports: []
+    networks:
+      - voice-engine
+
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    # Host port mapping removed – Prometheus is only needed for internal scraping
+    # ports: []
+    depends_on:
+      - voice-engine-api
+    networks:
+      - voice-engine
+
+volumes:
+  pgdata:
+  kafka-data:
+  voice-engine-data:
+
+networks:
+  voice-engine:
+    driver: bridge

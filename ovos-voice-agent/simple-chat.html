@@ -264,42 +264,69 @@
         async function connect() {
             try {
                 updateStatus('Connecting...', 'thinking');
-                
-                // Connect to local OVOS WebSocket server
-                websocket = new WebSocket('ws://localhost:65000/v1/realtime');
-                
+                // 1️⃣ Get a temporary client secret
+                const secretResp = await fetch('http://localhost:20000/v1/realtime/client_secrets', {
+                    method: 'POST',
+                    headers: {
+                        // Use the API key defined in settings.docker.env
+                        'Authorization': 'Bearer sk-local-token',
+                        'X-Request-Id': 'req_' + crypto.randomUUID().replace(/-/g, ''),
+                        'Content-Type': 'application/json'
+                    }
+                });
+                if (!secretResp.ok) throw new Error('Failed to obtain client secret');
+                const secretData = await secretResp.json();
+                const clientSecret = secretData.value;
+
+                // 2️⃣ Create a realtime session using that secret
+                const sessResp = await fetch('http://localhost:20000/v1/realtime/sessions', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer test-token',
+                        'X-Request-Id': 'req_' + crypto.randomUUID().replace(/-/g, ''),
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ client_secret: clientSecret })
+                });
+                if (!sessResp.ok) throw new Error('Failed to create session');
+                const sessData = await sessResp.json();
+                const sessionId = sessData.session.id;
+
+                // Store the secret for later Authorization header (required for WS)
+                window.__ovosClientSecret = clientSecret;
+                window.__ovosSessionId = sessionId;
+
+                // 3️⃣ Open the WebSocket with the secret as a Bearer token
+                const wsUrl = 'ws://localhost:20000/v1/realtime';
+                const wsHeaders = [
+                    ['Authorization', 'Bearer ' + clientSecret]
+                ];
+                // The browser WebSocket API does not support custom headers directly.
+                // We work around this by appending the token as a query param (the server also reads it from headers).
+                const ws = new WebSocket(wsUrl + '?access_token=' + encodeURIComponent(clientSecret));
+                websocket = ws;
+
                 websocket.onopen = function() {
                     updateStatus('✅ Connected to OVOS!', 'connected');
                     talkButton.disabled = false;
                     document.getElementById('connectBtn').disabled = true;
                     document.getElementById('disconnectBtn').disabled = false;
-                    
-                    console.log('Connected to OVOS voice agent');
+                    console.log('WebSocket opened');
                 };
-                
-                websocket.onmessage = function(event) {
-                    const message = JSON.parse(event.data);
-                    handleOVOSMessage(message);
-                };
-                
+                websocket.onmessage = function(event) { handleOVOSMessage(JSON.parse(event.data)); };
                 websocket.onclose = function() {
                     updateStatus('❌ Disconnected', 'disconnected');
                     talkButton.disabled = true;
                     document.getElementById('connectBtn').disabled = false;
                     document.getElementById('disconnectBtn').disabled = true;
-                    
-                    if (isRecording) {
-                        stopRecording();
-                    }
+                    if (isRecording) stopRecording();
                 };
-                
                 websocket.onerror = function(error) {
-                    showError('Connection failed! Make sure OVOS server is running on port 65000');
-                    console.error('WebSocket error:', error);
+                    showError('WebSocket error – check server logs');
+                    updateStatus('❌ Connection failed', 'disconnected');
                 };
-                
-            } catch (error) {
-                showError('Failed to connect: ' + error.message);
+            } catch (e) {
+                showError('Connect failed: ' + e.message);
                 updateStatus('❌ Connection failed', 'disconnected');
             }
         }
@@ -376,35 +403,12 @@
                     }
                     break;
                     
-                case 'response.audio_transcript.delta':
-                    // Handle streaming text response from OpenAI API
-                    if (message.delta) {
-                        addMessage('assistant', message.delta);
-                        addSystemMessage(`📝 AI transcript: "${message.delta}"`);
-                    }
-                    break;
-                    
                 case 'response.audio.delta':
                     addSystemMessage('🔊 Receiving audio response data...');
-                    // TODO: Play audio when implemented
                     break;
                     
                 case 'response.audio.done':
                     addSystemMessage('✅ Audio response complete');
-                    break;
-                    
-                case 'input_audio_buffer.speech_started':
-                    updateStatus('🎤 Voice detected - listening...', 'listening');
-                    addSystemMessage('🎤 Voice activity detected - started listening...');
-                    break;
-                    
-                case 'input_audio_buffer.speech_stopped':
-                    updateStatus('🛑 Voice stopped - processing...', 'thinking');
-                    addSystemMessage('🛑 Voice activity ended - processing speech...');
-                    break;
-                    
-                case 'input_audio_buffer.committed':
-                    addSystemMessage('✅ Audio committed - transcribing...');
                     break;
                     
                 case 'response.done':
@@ -554,7 +558,8 @@
         
         async function testConnection() {
             try {
-                const response = await fetch('http://localhost:65000/health');
+                // Health check now uses the same 20000 port
+                const response = await fetch('http://localhost:20000/health');
                 const data = await response.json();
                 
                 if (data.status === 'healthy') {

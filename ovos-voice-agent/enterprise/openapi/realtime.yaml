@@ -1,0 +1,255 @@
+openapi: 3.1.0
+info:
+  title: VoiceEngine Realtime API
+  version: 0.1.0
+  summary: Drop-in compatible subset of the OpenAI Realtime REST surface.
+servers:
+  - url: https://voiceengine.example.com
+paths:
+  /v1/realtime/client_secrets:
+    post:
+      operationId: createRealtimeClientSecret
+      summary: Issue an ephemeral client secret for establishing realtime sessions.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientSecretRequest'
+      responses:
+        '200':
+          description: Successful secret issuance.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientSecretResponse'
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/PolicyDeniedError' }
+  /v1/realtime/sessions:
+    post:
+      operationId: createRealtimeSession
+      summary: Create a realtime session using a previously issued client secret.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RealtimeSessionRequest'
+      responses:
+        '201':
+          description: Session created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RealtimeSessionResponse'
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/PolicyDeniedError' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+components:
+  responses:
+    UnauthorizedError:
+      description: Authorization token missing or invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    PolicyDeniedError:
+      description: Request rejected by policy engine.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ValidationError:
+      description: Payload failed validation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    ExpiresAfter:
+      type: object
+      properties:
+        anchor:
+          type: string
+          enum: [created_at, last_active_at]
+          default: created_at
+        seconds:
+          type: integer
+          minimum: 1
+      required: [seconds]
+    AudioFormat:
+      type: object
+      properties:
+        type:
+          type: string
+        rate:
+          type: integer
+      required: [type]
+    AudioInputConfig:
+      type: object
+      properties:
+        format:
+          $ref: '#/components/schemas/AudioFormat'
+        transcription:
+          type: object
+          additionalProperties: true
+        noise_reduction:
+          type: object
+          additionalProperties: true
+        turn_detection:
+          type: object
+          additionalProperties: true
+    AudioOutputConfig:
+      type: object
+      properties:
+        format:
+          $ref: '#/components/schemas/AudioFormat'
+        voice:
+          type: string
+        speed:
+          type: number
+    AudioConfig:
+      type: object
+      properties:
+        input:
+          $ref: '#/components/schemas/AudioInputConfig'
+        output:
+          $ref: '#/components/schemas/AudioOutputConfig'
+    RealtimeSessionConfig:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [realtime, transcription]
+          default: realtime
+        model:
+          type: string
+        instructions:
+          type: string
+        output_modalities:
+          type: array
+          items:
+            type: string
+        tools:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        tool_choice:
+          type: [string, object]
+          additionalProperties: true
+        max_output_tokens:
+          oneOf:
+            - type: string
+              enum: [inf]
+            - type: integer
+        tracing:
+          type: object
+          additionalProperties: true
+        truncation:
+          type: [string, object]
+          additionalProperties: true
+        prompt:
+          type: object
+          additionalProperties: true
+        audio:
+          $ref: '#/components/schemas/AudioConfig'
+        include:
+          type: array
+          items:
+            type: string
+      additionalProperties: true
+    ClientSecretRequest:
+      type: object
+      properties:
+        expires_after:
+          $ref: '#/components/schemas/ExpiresAfter'
+        session:
+          $ref: '#/components/schemas/RealtimeSessionConfig'
+      additionalProperties: false
+    ClientSecretResponse:
+      type: object
+      properties:
+        value:
+          type: string
+          description: Ephemeral client secret beginning with ek_.
+        expires_at:
+          type: integer
+          description: Unix epoch seconds when the secret expires.
+        session:
+          allOf:
+            - $ref: '#/components/schemas/RealtimeSessionResource'
+      required: [value, expires_at, session]
+    RealtimeSessionRequest:
+      type: object
+      required: [client_secret]
+      properties:
+        client_secret:
+          type: string
+        session:
+          $ref: '#/components/schemas/RealtimeSessionConfig'
+        persona:
+          type: object
+          additionalProperties: true
+      additionalProperties: false
+    RealtimeSessionResource:
+      type: object
+      properties:
+        object:
+          type: string
+          const: realtime.session
+        id:
+          type: string
+        status:
+          type: string
+          enum: [active, closed]
+        created_at:
+          type: integer
+        expires_at:
+          type: integer
+        model:
+          type: string
+        instructions:
+          type: string
+        output_modalities:
+          type: array
+          items:
+            type: string
+        tools:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        tool_choice:
+          type: [string, object]
+          additionalProperties: true
+        audio:
+          $ref: '#/components/schemas/AudioConfig'
+        max_output_tokens:
+          oneOf:
+            - type: string
+              enum: [inf]
+            - type: integer
+        persona:
+          type: object
+          additionalProperties: true
+      additionalProperties: true
+    RealtimeSessionResponse:
+      type: object
+      properties:
+        session:
+          $ref: '#/components/schemas/RealtimeSessionResource'
+      required: [session]
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            type: { type: string }
+            code: { type: string }
+            message: { type: string }
+            param: { type: [string, 'null'] }
+            request_id: { type: string }
+          required: [type, code, message, request_id]
+      required: [error]

@@ -9,7 +9,6 @@ import logging
 import json
 from typing import Optional, Dict, Any
 import httpx
-import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -123,12 +122,12 @@ The user is speaking to you through voice, so respond as if you're having a natu
         """Close HTTP client"""
         await self.client.aclose()
 
-# Global LLM provider instance
+# Use Groq as the sole provider (no alternative selection).
 llm_provider = GroqLLMProvider()
 
 async def generate_ai_response(session_id: str, user_input: str, context: Dict[str, Any] = None) -> str:
-    """Main function to generate AI responses"""
-    return await llm_provider.generate_response(session_id, user_input, context)
+    """Generate response using Groq (default provider)."""
+    return await llm_provider.generate_response(session_id, user_input)
 
 async def clear_session_memory(session_id: str):
     """Clear conversation memory for a session"""

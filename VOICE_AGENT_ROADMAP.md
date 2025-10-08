@@ -285,7 +285,7 @@ structlog>=23.2.0
 - ✅ **Sprint 1**: COMPLETED - Foundation server infrastructure
 - 🔄 **Sprint 2**: IN PROGRESS - Enhanced speech processing pipeline  
 - 🚀 **Sprint 3**: STARTING - OpenAI API compatibility layer
-- 🚀 **Sprint 4**: STARTING - WebSocket realtime protocol
+- 🚀 **Sprint 4**: STARTING - WebSocket realtime protocol _(handshake + baseline events delivered)_
 
 ### **Milestone Targets**:
 - **Week 4** (Nov 4): Basic voice conversation with OpenAI-compatible API

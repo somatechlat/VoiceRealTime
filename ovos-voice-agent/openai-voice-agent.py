@@ -12,32 +12,27 @@ This implements the complete OpenAI Realtime API with:
 - Function calling support
 """
 
-import asyncio
 import json
 import uuid
 import base64
 import logging
 from datetime import datetime
-from typing import Dict, List, Optional, Any
-import websockets
+from typing import Dict, Any
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 import uvicorn
+import os
+import sys
+# Ensure sprint2-speech directory is in sys.path for imports
+sys.path.append(os.path.join(os.path.dirname(__file__), "sprint2-speech"))
+# Real speech pipeline import
+from sprint2_speech.speech_pipeline import SpeechPipeline
+# Import our LLM integration
+from llm_integration import generate_ai_response
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Import our LLM integration
-try:
-    from llm_integration import generate_ai_response
-    logger.info("✅ LLM integration loaded")
-except ImportError:
-    logger.warning("⚠️ LLM integration not available - using mock responses")
-    
-    async def generate_ai_response(session_id: str, text: str) -> str:
-        return f"I heard you say: {text}. This is a mock response since LLM integration is not available."
 
 app = FastAPI(title="OpenAI-Compatible Voice Agent", version="1.0.0")
 
@@ -57,6 +52,8 @@ class VoiceSession:
         }
         self.voice = "alloy"
         self.instructions = "You are a helpful AI assistant. Respond naturally and conversationally."
+        # Initialize a speech pipeline for this session
+        self.pipeline = SpeechPipeline(session_id=self.session_id)
 
 class RealtimeConnectionManager:
     """Manages WebSocket connections for the Realtime API"""
@@ -231,8 +228,9 @@ class VoiceEventProcessor:
                 "item_id": f"item_{uuid.uuid4().hex[:8]}"
             })
             
-            # Simulate transcription (in real implementation, use Whisper)
-            transcribed_text = await self.transcribe_audio(session.audio_buffer)
+            # Use the pipeline's STT engine for real transcription
+            transcription_result = await session.pipeline.stt_engine.transcribe(session.pipeline.audio_processor.audio_buffer, None)
+            transcribed_text = transcription_result.get('text', "...")
             
             # Create conversation item for user input
             user_item_id = f"item_{uuid.uuid4().hex[:8]}"
@@ -242,23 +240,20 @@ class VoiceEventProcessor:
                 "type": "message",
                 "status": "completed",
                 "role": "user",
-                "content": [{
-                    "type": "input_audio",
-                    "transcript": transcribed_text
-                }]
+                "content": [{"type": "input_audio", "transcript": transcribed_text}]
             }
             
             # Send conversation.item.created
             await self.manager.send_event(session_id, {
                 "type": "conversation.item.created",
                 "previous_item_id": None,
-                "item": user_item
+                "item": user_item,
             })
             
             session.conversation.append(user_item)
             
-            # Clear audio buffer
-            session.audio_buffer = b''
+            # Clear pipeline buffers
+            await session.pipeline.reset_session()
             
             # Automatically trigger response
             await self.handle_response_create(session_id, {"type": "response.create"})
@@ -349,7 +344,7 @@ class VoiceEventProcessor:
             })
             
             # Generate and send audio response
-            audio_data = await self.generate_speech(ai_response, session.voice)
+            audio_data = await self.generate_speech(session_id, ai_response, session.voice)
             if audio_data:
                 # Send audio delta
                 audio_b64 = base64.b64encode(audio_data).decode('utf-8')
@@ -400,18 +395,12 @@ class VoiceEventProcessor:
         # Implementation for response cancellation
         pass
     
-    async def transcribe_audio(self, audio_data: bytes) -> str:
-        """Transcribe audio to text (mock implementation)"""
-        # In a real implementation, this would use Whisper or similar
-        if len(audio_data) > 1024:
-            return "Hello, I'm speaking to the voice agent!"
-        return "..."
-    
-    async def generate_speech(self, text: str, voice: str) -> bytes:
-        """Generate speech from text (mock implementation)"""
-        # In a real implementation, this would use TTS
-        # Return some mock audio data
-        return b'\x00' * 2048  # 2KB of silence
+    async def generate_speech(self, session_id: str, text: str, voice: str) -> bytes:
+        """Generate speech from text using the session's SpeechPipeline"""
+        pipeline = self.manager.sessions[session_id].pipeline
+        tts_result = await pipeline.synthesize_response(text, voice=voice, streaming=False)
+        # The pipeline returns a dict with 'audio' key
+        return tts_result.get('audio', b'')
     
     async def send_error(self, session_id: str, error_type: str, message: str):
         """Send error event"""
