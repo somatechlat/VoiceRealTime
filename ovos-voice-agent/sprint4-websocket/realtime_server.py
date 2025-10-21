@@ -7,15 +7,16 @@ OpenAI-compatible WebSocket server for real-time voice processing
 import asyncio
 import json
 import logging
+import os
 import base64
 import uuid
-from typing import Dict, Any, Optional, Set
+from functools import lru_cache
+from typing import Dict, Set
 from datetime import datetime, timezone
 import time
-import wave
-import io
+from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, status
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
@@ -24,8 +25,9 @@ import sys
 sys.path.append('../sprint2-speech')
 sys.path.append('../sprint3-api')
 sys.path.append('../')
-from speech_pipeline import create_realtime_pipeline, SpeechPipeline
-from llm_integration import generate_ai_response, clear_session_memory
+from speech_pipeline import create_realtime_pipeline, SpeechPipeline, TTSEngine
+from llm_integration import generate_ai_response
+from enterprise.app.tts.provider import TTSProvider, get_provider
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -46,6 +48,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Simple container used to share cancel state with the TTS provider.
+class StreamingState:
+    __slots__ = ("_cancel_current",)
+
+    def __init__(self) -> None:
+        self._cancel_current: bool = False
+
+
 # Global connection management
 class RealtimeConnectionManager:
     """Manages WebSocket connections and sessions"""
@@ -55,6 +65,8 @@ class RealtimeConnectionManager:
         self.session_data: Dict[str, dict] = {}
         self.speech_pipelines: Dict[str, SpeechPipeline] = {}
         self.conversation_states: Dict[str, dict] = {}
+        self.tts_providers: Dict[str, TTSProvider] = {}
+        self.tts_stream_states: Dict[str, "StreamingState"] = {}
         
     async def connect(self, websocket: WebSocket, session_id: str):
         """Accept WebSocket connection and initialize session"""
@@ -62,6 +74,18 @@ class RealtimeConnectionManager:
         
         # Store connection
         self.active_connections[session_id] = websocket
+
+        # Create speech pipeline early so we can surface default voice settings
+        pipeline = create_realtime_pipeline(session_id)
+        self.speech_pipelines[session_id] = pipeline
+
+        # Prepare TTS provider and streaming state for this session.
+        try:
+            self.tts_providers[session_id] = get_provider()
+        except Exception as exc:
+            logger.error("Failed to initialize TTS provider: %s", exc)
+            self.tts_providers.pop(session_id, None)
+        self.tts_stream_states[session_id] = StreamingState()
         
         # Initialize session data
         self.session_data[session_id] = {
@@ -81,7 +105,11 @@ class RealtimeConnectionManager:
             "input_audio_transcription": {
                 "model": "whisper-1"
             },
-            "voice": "default",
+            "voice": pipeline.tts_engine.voice,
+            "tts": {
+                "voice": pipeline.tts_engine.voice,
+                "speed": pipeline.tts_engine.speed,
+            },
             "temperature": 0.8,
             "max_response_output_tokens": "inf"
         }
@@ -94,10 +122,6 @@ class RealtimeConnectionManager:
             "output_audio_buffer": b"",
             "conversation_id": f"conv_{uuid.uuid4().hex[:16]}"
         }
-        
-        # Create speech pipeline
-        pipeline = create_realtime_pipeline(session_id)
-        self.speech_pipelines[session_id] = pipeline
         
         logger.info(f"WebSocket connected for session {session_id}")
         
@@ -120,6 +144,10 @@ class RealtimeConnectionManager:
         pipeline = self.speech_pipelines.pop(session_id, None)
         if pipeline:
             pipeline.reset_session()
+
+        # Cleanup TTS helpers
+        self.tts_providers.pop(session_id, None)
+        self.tts_stream_states.pop(session_id, None)
             
         logger.info(f"WebSocket disconnected for session {session_id}")
     
@@ -145,6 +173,31 @@ class RealtimeConnectionManager:
 
 # Global connection manager
 connection_manager = RealtimeConnectionManager()
+
+
+@lru_cache(maxsize=1)
+def _load_default_voice_catalog() -> tuple[list[str], str, float]:
+    """Load available voices once by spinning up a lightweight TTS engine."""
+    try:
+        engine = TTSEngine()
+        voices = list(engine.get_available_voices())
+        default_voice = engine.voice
+        default_speed = engine.speed
+        return voices, default_voice, default_speed
+    except Exception as exc:
+        logger.error("Failed to initialize default voice catalog: %s", exc)
+        return ["am_onyx"], "am_onyx", 1.1
+
+
+def get_voice_catalog() -> tuple[list[str], str, float]:
+    """Return the current voice inventory, preferring active pipelines."""
+    active_pipeline = next(iter(connection_manager.speech_pipelines.values()), None)
+    if active_pipeline:
+        voices = list(active_pipeline.tts_engine.get_available_voices())
+        default_voice = getattr(active_pipeline, "current_voice", active_pipeline.tts_engine.voice)
+        default_speed = getattr(active_pipeline, "current_speed", active_pipeline.tts_engine.speed)
+        return voices, default_voice, default_speed
+    return _load_default_voice_catalog()
 
 class RealtimeEventProcessor:
     """Processes OpenAI Realtime API events"""
@@ -196,15 +249,36 @@ class RealtimeEventProcessor:
         # Update session configuration
         session_update = event.get("session", {})
         
+        pipeline = self.manager.speech_pipelines.get(session_id)
+
         for key, value in session_update.items():
+            if key == "tts" and isinstance(value, dict):
+                tts_settings = session_data.setdefault("tts", {})
+                tts_updates = {}
+                if "voice" in value:
+                    tts_updates["voice"] = value["voice"]
+                if "speed" in value:
+                    try:
+                        tts_updates["speed"] = float(value["speed"])
+                    except (TypeError, ValueError):
+                        logger.warning("Invalid speed provided in session update: %s", value.get("speed"))
+                tts_settings.update(tts_updates)
+
+                if pipeline:
+                    if "voice" in tts_updates:
+                        pipeline.set_voice(tts_updates["voice"])
+                        session_data["voice"] = pipeline.current_voice
+                        tts_settings["voice"] = pipeline.current_voice
+                    if "speed" in tts_updates:
+                        pipeline.set_speed(tts_updates["speed"])
+                        tts_settings["speed"] = pipeline.current_speed
+                continue
+
             if key in session_data:
                 session_data[key] = value
-        
-        # Apply updates to speech pipeline
-        pipeline = self.manager.speech_pipelines.get(session_id)
-        if pipeline:
-            if "voice" in session_update:
-                pipeline.set_voice(session_update["voice"])
+                if key == "voice" and pipeline:
+                    pipeline.set_voice(value)
+                    session_data["voice"] = pipeline.current_voice
         
         # Send session.updated event
         await self.manager.send_event(session_id, {
@@ -346,10 +420,67 @@ class RealtimeEventProcessor:
             "item": item
         })
     
+    async def handle_conversation_item_truncate(self, session_id: str, event: dict):
+        """Handle conversation.item.truncate event"""
+        item_id = event.get("item_id")
+        content_index = event.get("content_index")
+        audio_end_ms = event.get("audio_end_ms")
+        
+        if not item_id:
+            await self.send_error(session_id, "invalid_request_error", "item_id is required", "item_id")
+            return
+        
+        conversation_state = self.manager.conversation_states.get(session_id, {})
+        items = conversation_state.get("items", [])
+        
+        # Find and truncate item
+        item_found = False
+        for item in items:
+            if item["id"] == item_id:
+                item_found = True
+                # Truncate content at specified index
+                if content_index is not None and "content" in item:
+                    item["content"] = item["content"][:content_index + 1]
+                
+                # Send truncated event
+                await self.manager.send_event(session_id, {
+                    "type": "conversation.item.truncated",
+                    "item_id": item_id,
+                    "content_index": content_index,
+                    "audio_end_ms": audio_end_ms
+                })
+                break
+        
+        if not item_found:
+            await self.send_error(session_id, "not_found_error", f"Item {item_id} not found")
+    
+    async def handle_conversation_item_delete(self, session_id: str, event: dict):
+        """Handle conversation.item.delete event"""
+        item_id = event.get("item_id")
+        
+        if not item_id:
+            await self.send_error(session_id, "invalid_request_error", "item_id is required", "item_id")
+            return
+        
+        conversation_state = self.manager.conversation_states.get(session_id, {})
+        items = conversation_state.get("items", [])
+        
+        # Find and remove item
+        initial_length = len(items)
+        items[:] = [item for item in items if item.get("id") != item_id]
+        
+        if len(items) == initial_length:
+            await self.send_error(session_id, "not_found_error", f"Item {item_id} not found")
+            return
+        
+        # Send deleted event
+        await self.manager.send_event(session_id, {
+            "type": "conversation.item.deleted",
+            "item_id": item_id
+        })
+    
     async def handle_response_create(self, session_id: str, event: dict):
         """Handle response.create event"""
-        response_config = event.get("response", {})
-        
         # Extract the last user message for response generation
         conversation_state = self.manager.conversation_states.get(session_id, {})
         items = conversation_state.get("items", [])
@@ -447,35 +578,144 @@ class RealtimeEventProcessor:
             
             # Get session voice settings
             session_data = self.manager.session_data.get(session_id, {})
-            voice = session_data.get("voice", "default")
+            tts_cfg = session_data.get("tts", {})
+            voice = tts_cfg.get("voice") or session_data.get("voice")
+            speed = tts_cfg.get("speed") or getattr(pipeline, "current_speed", None)
+            if voice is None:
+                voice = getattr(pipeline, "current_voice", pipeline.tts_engine.voice)
+            if speed is None:
+                speed = pipeline.current_speed if hasattr(pipeline, "current_speed") else pipeline.tts_engine.speed
             
-            # Synthesize audio
-            tts_result = await pipeline.synthesize_response(text, voice=voice, streaming=True)
-            
-            if tts_result.get('audio'):
-                # Convert audio to base64 for transmission
-                audio_b64 = base64.b64encode(tts_result['audio']).decode('utf-8')
-                
-                # Send audio delta event
-                await self.manager.send_event(session_id, {
-                    "type": "response.audio.delta",
-                    "response_id": response_id,
-                    "item_id": item_id,
-                    "output_index": 0,
-                    "content_index": 0,
-                    "delta": audio_b64
-                })
-                
-                # Send transcript delta
-                await self.manager.send_event(session_id, {
-                    "type": "response.audio_transcript.delta",
-                    "response_id": response_id,
-                    "item_id": item_id,
-                    "output_index": 0,
-                    "content_index": 0,
-                    "delta": text
-                })
-            
+            # Track active response for cancellation handling.
+            conversation_state = self.manager.conversation_states.get(session_id, {})
+            conversation_state["response"] = {
+                "id": response_id,
+                "object": "realtime.response",
+                "status": "in_progress",
+                "output": [],
+            }
+
+            # Stream audio using the provider abstraction.
+            stream_state = self.manager.tts_stream_states.get(session_id)
+            if stream_state:
+                stream_state._cancel_current = False
+
+            provider = self.manager.tts_providers.get(session_id)
+            if provider is None:
+                try:
+                    provider = get_provider()
+                    self.manager.tts_providers[session_id] = provider
+                except Exception as exc:
+                    logger.error("Failed to obtain TTS provider: %s", exc)
+                    provider = None
+
+            audio_streamed = False
+            transcript_sent = False
+
+            if provider is not None:
+                try:
+                    async for chunk_b64 in provider.synthesize(
+                        text,
+                        voice=voice,
+                        speed=speed,
+                        cancel_flag=stream_state,
+                    ):
+                        if stream_state and stream_state._cancel_current:
+                            break
+
+                        audio_streamed = True
+                        await self.manager.send_event(
+                            session_id,
+                            {
+                                "type": "response.audio.delta",
+                                "response_id": response_id,
+                                "item_id": item_id,
+                                "output_index": 0,
+                                "content_index": 0,
+                                "delta": chunk_b64,
+                            },
+                        )
+
+                        if not transcript_sent:
+                            await self.manager.send_event(
+                                session_id,
+                                {
+                                    "type": "response.audio_transcript.delta",
+                                    "response_id": response_id,
+                                    "item_id": item_id,
+                                    "output_index": 0,
+                                    "content_index": 0,
+                                    "delta": text,
+                                },
+                            )
+                            transcript_sent = True
+                except Exception as exc:
+                    logger.error("TTS provider streaming failed: %s", exc)
+
+            if not audio_streamed and not (stream_state and stream_state._cancel_current):
+                # Fallback: use the legacy pipeline synthesis to ensure the client hears something.
+                tts_result = await pipeline.synthesize_response(
+                    text, voice=voice, speed=speed, streaming=False
+                )
+                audio_bytes = tts_result.get("audio")
+                if audio_bytes:
+                    chunk_b64 = base64.b64encode(audio_bytes).decode("utf-8")
+                    await self.manager.send_event(
+                        session_id,
+                        {
+                            "type": "response.audio.delta",
+                            "response_id": response_id,
+                            "item_id": item_id,
+                            "output_index": 0,
+                            "content_index": 0,
+                            "delta": chunk_b64,
+                        },
+                    )
+                    await self.manager.send_event(
+                        session_id,
+                        {
+                            "type": "response.audio_transcript.delta",
+                            "response_id": response_id,
+                            "item_id": item_id,
+                            "output_index": 0,
+                            "content_index": 0,
+                            "delta": text,
+                        },
+                    )
+                    audio_streamed = True
+
+            if stream_state and stream_state._cancel_current:
+                logger.info("Streaming cancelled for session %s", session_id)
+                conversation_state["response"] = None
+                return
+
+            if not audio_streamed:
+                if not transcript_sent:
+                    await self.manager.send_event(
+                        session_id,
+                        {
+                            "type": "response.audio_transcript.delta",
+                            "response_id": response_id,
+                            "item_id": item_id,
+                            "output_index": 0,
+                            "content_index": 0,
+                            "delta": text,
+                        },
+                    )
+                    transcript_sent = True
+                silence_b64 = base64.b64encode(b"\x00" * 1024).decode("utf-8")
+                await self.manager.send_event(
+                    session_id,
+                    {
+                        "type": "response.audio.delta",
+                        "response_id": response_id,
+                        "item_id": item_id,
+                        "output_index": 0,
+                        "content_index": 0,
+                        "delta": silence_b64,
+                    },
+                )
+
             # Mark item as completed
             await self.manager.send_event(session_id, {
                 "type": "response.output_item.done",
@@ -520,6 +760,7 @@ class RealtimeEventProcessor:
                     }
                 }
             })
+            conversation_state["response"] = None
             
         except Exception as e:
             logger.error(f"Audio generation error: {e}")
@@ -527,17 +768,29 @@ class RealtimeEventProcessor:
     
     async def handle_response_cancel(self, session_id: str, event: dict):
         """Handle response.cancel event"""
-        # Stop any ongoing response generation
+        # Mark cancel flag so streaming coroutine breaks out immediately.
+        stream_state = self.manager.tts_stream_states.get(session_id)
+        if stream_state:
+            stream_state._cancel_current = True
+
         conversation_state = self.manager.conversation_states.get(session_id, {})
-        current_response = conversation_state.get("response")
-        
-        if current_response:
-            await self.manager.send_event(session_id, {
+        current_response = conversation_state.get("response") or {}
+
+        response_payload = current_response if current_response else {
+            "id": event.get("response_id") or f"resp_{uuid.uuid4().hex[:16]}",
+            "object": "realtime.response",
+            "status": "cancelled",
+        }
+
+        await self.manager.send_event(
+            session_id,
+            {
                 "type": "response.cancelled",
-                "response": current_response
-            })
-            
-            conversation_state["response"] = None
+                "response": response_payload,
+            },
+        )
+
+        conversation_state["response"] = None
     
     async def send_error(self, session_id: str, error_type: str, message: str):
         """Send error event to client"""
@@ -596,11 +849,29 @@ async def websocket_realtime(websocket: WebSocket):
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
+    model_dir = Path(os.getenv("KOKORO_MODEL_DIR", str(Path.cwd() / "cache" / "kokoro")))
+    model_file = os.getenv("KOKORO_MODEL_FILE", "kokoro-v1.0.onnx")
+    voices_file = os.getenv("KOKORO_VOICES_FILE", "voices-v1.0.bin")
+    kokoro_present = (model_dir / model_file).exists() and (model_dir / voices_file).exists()
     return {
         "status": "healthy",
         "active_connections": len(connection_manager.active_connections),
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "protocol": "OpenAI Realtime API v1"
+        "protocol": "OpenAI Realtime API v1",
+        "kokoro_model_present": kokoro_present
+    }
+
+
+@app.get("/v1/tts/voices")
+async def list_tts_voices():
+    """Expose the available Kokoro voices and defaults to the UI."""
+    voices, default_voice, default_speed = get_voice_catalog()
+    return {
+        "object": "list",
+        "voices": [{"id": vid, "name": vid} for vid in voices],
+        "default_voice": default_voice,
+        "default_speed": default_speed,
+        "count": len(voices)
     }
 
 @app.get("/v1/realtime/sessions")
