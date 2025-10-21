@@ -2,17 +2,32 @@
 
 from __future__ import annotations
 
-from flask_cors import CORS
+# Third‑party imports – alphabetical order
 from flask import Flask
 from werkzeug.middleware.dispatcher import DispatcherMiddleware
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+# Local imports – alphabetical order
 from .config import AppConfig, configure_app_from_env
 from .observability.logging import configure_logging
 from .observability.metrics import init_metrics
 from .routes.health import health_blueprint
 from .routes.realtime import realtime_blueprint
+from .routes.tts import tts_blueprint
 from .transports import register_transports
+
+# Flask-CORS is optional; fallback to a no‑op implementation if the package is not installed.
+try:
+    from flask_cors import CORS
+except Exception:  # pragma: no cover – package may be absent in minimal environments
+    def CORS(app, *_, **__):  # type: ignore[override]
+        """Fallback stub for ``flask_cors.CORS`` when the library is unavailable.
+
+        The real CORS extension adds ``Access-Control-Allow-Origin`` headers to
+        responses.  For testing or environments where the dependency is omitted,
+        we provide a no‑op function that simply returns the app unchanged.
+        """
+        return app
 
 def create_app(config: AppConfig | None = None) -> Flask:
     """Application factory that wires configuration, logging, metrics, and blueprints."""
@@ -27,6 +42,7 @@ def create_app(config: AppConfig | None = None) -> Flask:
     # Attach blueprints
     app.register_blueprint(health_blueprint)
     app.register_blueprint(realtime_blueprint, url_prefix="/v1")
+    app.register_blueprint(tts_blueprint, url_prefix="/v1")
     register_transports(app)
 
     # Enable Cross‑Origin Resource Sharing – allow any origin for all endpoints

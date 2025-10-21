@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OVOS Advanced Voice</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;background:#0f172a;color:#e2e8f0;margin:0;padding:24px}
+    .wrap{max-width:960px;margin:0 auto}
+    h1{font-size:28px;margin:8px 0 16px}
+    .grid{display:grid;gap:16px;grid-template-columns:1fr 1fr}
+    .card{background:#111827;border:1px solid #1f2937;border-radius:12px;padding:16px}
+    label{display:block;font-size:12px;color:#9ca3af;margin-bottom:4px}
+    select,input[type=range]{width:100%}
+    button{background:#2563eb;border:none;border-radius:8px;color:white;padding:10px 14px;font-weight:600;cursor:pointer}
+    button.alt{background:#374151}
+    button.danger{background:#dc2626}
+    .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .log{background:#0b1220;border:1px solid #1f2937;border-radius:8px;padding:12px;max-height:260px;overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+    .pill{padding:4px 8px;border-radius:12px;background:#1f2937}
+  </style>
+  <script>
+    let ws=null, audioStream=null, mediaRecorder=null, isRecording=false, currentAudio=null;
+    let clientSecret=null, sessionId=null;
+    let speaking=false;
+
+    function log(msg){const el=document.getElementById('log');const d=document.createElement('div');d.textContent=`${new Date().toLocaleTimeString()}  ${msg}`;el.appendChild(d);el.scrollTop=el.scrollHeight}
+
+    const OVOS_CFG = window.OVOS_CONFIG || { VOICE_AGENT_BASE: 'http://localhost:60200', VOICE_AGENT_WS_BASE: 'ws://localhost:60200' };
+
+    async function getSecret(){
+      const r=await fetch(`${OVOS_CFG.VOICE_AGENT_BASE}/v1/realtime/client_secrets`,{method:'POST',headers:{'Authorization':'Bearer sk-local-token','Content-Type':'application/json'},body:'{}'});
+      const j=await r.json(); clientSecret=j.value; sessionId=j.session.id; return j.value;
+    }
+
+    async function connect(){
+      if(!clientSecret) await getSecret();
+      ws=new WebSocket(`ws://localhost:60200/v1/realtime?access_token=${encodeURIComponent(clientSecret)}`);
+      ws.onopen=()=>{log('WS connected'); document.getElementById('btnConnect').disabled=true; document.getElementById('btnDisconnect').disabled=false;}
+      ws.onclose=()=>{log('WS closed'); document.getElementById('btnConnect').disabled=false; document.getElementById('btnDisconnect').disabled=true;}
+      ws.onmessage=(ev)=>{
+        let m; try{m=JSON.parse(ev.data)}catch{ return }
+        const t=m.type; if(!t) return; log(`evt: ${t}`)
+        if(t==='response.audio.delta' && m.delta){
+          try{ const b64=m.delta, bin=atob(b64), u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const blob=new Blob([u8],{type:'audio/wav'}); if(currentAudio){ currentAudio.pause(); currentAudio=null } const url=URL.createObjectURL(blob); currentAudio=new Audio(url); currentAudio.play().catch(()=>{}); }catch(e){ log('audio play err') }
+        }
+      }
+    }
+
+    function disconnect(){ if(ws){ ws.close(); ws=null } }
+
+    async function loadVoices(){
+      const r=await fetch('http://localhost:60200/v1/tts/voices'); const j=await r.json(); const sel=document.getElementById('voice'); sel.innerHTML=''; j.voices.forEach(v=>{const o=document.createElement('option'); o.value=v.id; o.textContent=v.id; sel.appendChild(o)});
+    }
+
+    async function applySettings(){
+      const voice=document.getElementById('voice').value; const speed=parseFloat(document.getElementById('speed').value);
+      if(!ws || ws.readyState!==WebSocket.OPEN){ log('WS not open'); return }
+      ws.send(JSON.stringify({type:'session.update', session:{ audio:{ output:{ format:{ rate:24000, type:'audio/pcm' } } } }, tts:{ voice, speed }}));
+      log(`applied settings voice=${voice} speed=${speed}`)
+    }
+
+    function ask(){
+      if(!ws || ws.readyState!==WebSocket.OPEN) return;
+      const text=document.getElementById('prompt').value||'Say something cheerful!';
+      ws.send(JSON.stringify({type:'conversation.item.create', item:{role:'user', content:[{type:'input_text', text}]}}));
+      ws.send(JSON.stringify({type:'response.create'}));
+    }
+
+    function interrupt(){ if(!ws||ws.readyState!==WebSocket.OPEN) return; ws.send(JSON.stringify({type:'response.cancel'})); if(currentAudio){ currentAudio.pause(); currentAudio=null } log('interrupt requested') }
+
+    async function startRec(){
+      if(isRecording) return; const stream=await navigator.mediaDevices.getUserMedia({audio:true}); audioStream=stream; mediaRecorder=new MediaRecorder(stream); mediaRecorder.ondataavailable=(e)=>{ if(e.data.size>0 && ws && ws.readyState===WebSocket.OPEN){ const rd=new FileReader(); rd.onload=()=>{ const arr=rd.result; const b64=btoa(String.fromCharCode(...new Uint8Array(arr))); ws.send(JSON.stringify({type:'input_audio_buffer.append', audio:b64})) }; rd.readAsArrayBuffer(e.data) } }
+      mediaRecorder.start(100); isRecording=true; log('recording...')
+    }
+    function stopRec(){ if(!isRecording) return; mediaRecorder.stop(); audioStream.getTracks().forEach(t=>t.stop()); isRecording=false; ws && ws.send(JSON.stringify({type:'input_audio_buffer.commit'})); setTimeout(()=> ws && ws.send(JSON.stringify({type:'response.create'})), 200) }
+    window.addEventListener('load',()=>{ document.querySelectorAll('.pill').forEach(p=>{ if(p.textContent.includes('Server:')) p.querySelector && (p.querySelector('span') ? p.querySelector('span').textContent = OVOS_CFG.VOICE_AGENT_WS_BASE : null) }); loadVoices() })
+  </script>
+</head>
+<body>
+  <div class="wrap">
+    <h1>OVOS Advanced Voice</h1>
+    <div class="grid">
+      <div class="card">
+        <div class="row">
+          <button id="btnConnect" onclick="connect()">Connect</button>
+          <button id="btnDisconnect" class="alt" onclick="disconnect()" disabled>Disconnect</button>
+          <span class="pill">Server: <span id="serverAddr">ws://localhost:60200</span></span>
+        </div>
+        <hr style="opacity:.1;margin:12px 0" />
+        <div>
+          <label>Voice</label>
+          <select id="voice"></select>
+        </div>
+        <div>
+          <label>Speed <span id="speedVal">1.10</span></label>
+          <div class="row">
+            <input id="speed" type="range" min="0.5" max="2.5" step="0.05" value="1.10" oninput="document.getElementById('speedVal').textContent=this.value; document.getElementById('speedNum').value=this.value" />
+            <input id="speedNum" type="number" min="0.5" max="2.5" step="0.05" value="1.10" style="width:100px;padding:8px;border-radius:8px;border:1px solid #1f2937;background:#0b1220;color:#e2e8f0" oninput="document.getElementById('speed').value=this.value; document.getElementById('speedVal').textContent=this.value" />
+          </div>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <button onclick="applySettings()">Apply Settings</button>
+          <button class="danger" onclick="interrupt()">Interrupt</button>
+        </div>
+      </div>
+      <div class="card">
+        <label>Prompt</label>
+        <input id="prompt" placeholder="Ask something…" style="width:100%;padding:10px;border-radius:8px;border:1px solid #1f2937;background:#0b1220;color:#e2e8f0" />
+        <div class="row" style="margin-top:8px">
+          <button onclick="ask()">Ask</button>
+          <button class="alt" onclick="startRec()">Start Mic</button>
+          <button class="alt" onclick="stopRec()">Stop Mic</button>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+</body>
+</html>

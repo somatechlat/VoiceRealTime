@@ -7,8 +7,9 @@ Real-time STT, TTS, and audio processing components
 import asyncio
 import logging
 import numpy as np
-import torch
+import os
 import threading
+import urllib.request
 from typing import Optional, Callable, AsyncGenerator, Dict, Any
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -22,19 +23,20 @@ from datetime import datetime, timedelta
 # Enhanced audio processing
 import librosa
 import soundfile as sf
+from ovos_voice_agent import config
 import noisereduce as nr
 from scipy import signal
 
-# OVOS components with enhanced imports
+# OVOS plugin TTS availability
 try:
-    from ovos_plugin_manager.stt import OVOSSTTFactory
-    from ovos_plugin_manager.tts import OVOSTTSFactory
-    from ovos_plugin_manager.templates.stt import STT, StreamingSTT
     from ovos_plugin_manager.templates.tts import TTS
     OVOS_AVAILABLE = True
-except ImportError:
+except Exception:
     OVOS_AVAILABLE = False
     logging.warning("OVOS plugins not available, using fallback implementations")
+
+_DEFAULT_MODEL_URL = config.KOKORO_MODEL_URL
+_DEFAULT_VOICES_URL = config.KOKORO_VOICES_URL
 
 # Faster Whisper for STT
 try:
@@ -597,214 +599,284 @@ class STTEngine:
         }
 
 class TTSEngine:
-    """Enhanced Text-to-Speech engine with phoonnx and real-time streaming"""
-    
-    def __init__(self, voice: str = "default", streaming: bool = True):
-        self.engine = None
-        self.voice = voice
+    """Enhanced Text-to-Speech engine with Kokoro support and fallbacks."""
+
+    _kokoro_lock = threading.Lock()
+    _kokoro_engine = None
+    _kokoro_voices: list[str] = []
+    _kokoro_sample_rate = 24000
+
+    _DEFAULT_MODEL_URL = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx"
+    _DEFAULT_VOICES_URL = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin"
+
+    def __init__(self, voice: str = "am_onyx", streaming: bool = True):
+        env_voice = os.getenv("KOKORO_VOICE")
+        self.voice = env_voice or voice
+        self.speed = float(os.getenv("KOKORO_SPEED", "1.1"))
         self.is_loaded = False
         self.streaming_enabled = streaming
-        
-        # Performance settings for real-time TTS
-        self.sample_rate = 24000  # Higher quality
-        self.chunk_size = 1024   # For streaming
-        self.voice_cache = {}    # Cache for voice models
-        
-        # Try to load phoonnx first, then OVOS TTS
-        if self._check_phoonnx_available():
-            self._load_phoonnx()
-        elif OVOS_AVAILABLE:
-            self._load_ovos_tts()
-        else:
-            logger.error("No TTS engine available")
-    
-    def _check_phoonnx_available(self) -> bool:
-        """Check if phoonnx is available"""
+        self.sample_rate = 24000
+        self.engine_type = None
+        self.engine = None
+        self.available_voices: list[str] = []
+
+        self._initialize_engine()
+
+    def _initialize_engine(self) -> None:
+        preference = os.getenv("TTS_ENGINE", "kokoro").lower()
+        ordered = [preference, "kokoro", "phoonnx", "ovos"]
+        seen = set()
+
+        for candidate in ordered:
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+
+            if candidate == "kokoro" and self._load_kokoro():
+                return
+            if candidate == "phoonnx" and self._check_phoonnx_available():
+                self._load_phoonnx()
+                return
+            if candidate == "ovos" and OVOS_AVAILABLE:
+                self._load_ovos_tts()
+                return
+
+        logger.error("No TTS engine available")
+
+    def _ensure_kokoro_assets(self, model_path: Path, voices_path: Path) -> None:
+        model_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if not model_path.exists():
+            model_url = os.getenv("KOKORO_MODEL_URL", self._DEFAULT_MODEL_URL)
+            self._download_file(model_url, model_path)
+
+        if not voices_path.exists():
+            voices_url = os.getenv("KOKORO_VOICES_URL", self._DEFAULT_VOICES_URL)
+            self._download_file(voices_url, voices_path)
+
+    def _download_file(self, url: str, target: Path) -> None:
         try:
-            import onnxruntime
-            # Check if phoonnx models are available
+            logger.info(f"Downloading {url} -> {target}")
+            with urllib.request.urlopen(url) as response, open(target, "wb") as fh:
+                fh.write(response.read())
+        except Exception as exc:
+            logger.error(f"Failed to download {url}: {exc}")
+            raise
+
+    def _load_kokoro(self) -> bool:
+        try:
+            import kokoro_onnx as K  # type: ignore
+
+            model_dir = Path(os.getenv("KOKORO_MODEL_DIR", str(Path.cwd() / "cache" / "kokoro"))).expanduser()
+            model_file = os.getenv("KOKORO_MODEL_FILE", "kokoro-v1.0.onnx")
+            voices_file = os.getenv("KOKORO_VOICES_FILE", "voices-v1.0.bin")
+
+            model_path = model_dir / model_file
+            voices_path = model_dir / voices_file
+
+            self._ensure_kokoro_assets(model_path, voices_path)
+
+            with self._kokoro_lock:
+                if TTSEngine._kokoro_engine is None:
+                    TTSEngine._kokoro_engine = K.Kokoro(
+                        model_path=str(model_path),
+                        voices_path=str(voices_path),
+                    )
+                    voices = TTSEngine._kokoro_engine.get_voices()
+                    TTSEngine._kokoro_voices = voices or [self.voice]
+                    TTSEngine._kokoro_sample_rate = getattr(TTSEngine._kokoro_engine, "sample_rate", 24000)
+
+            self.engine = TTSEngine._kokoro_engine
+            self.available_voices = TTSEngine._kokoro_voices
+            self.sample_rate = TTSEngine._kokoro_sample_rate
+            self.engine_type = "kokoro"
+            self.is_loaded = True
+
+            if self.voice not in self.available_voices and self.available_voices:
+                self.voice = self.available_voices[0]
+
+            logger.info("Kokoro TTS engine ready with %d voices", len(self.available_voices))
+            return True
+        except Exception as exc:
+            logger.error(f"Failed to load Kokoro TTS: {exc}")
+            return False
+
+    def _check_phoonnx_available(self) -> bool:
+        try:
+            import onnxruntime  # type: ignore  # noqa: F401
             return True
         except ImportError:
             return False
-    
-    def _load_phoonnx(self):
-        """Load phoonnx TTS engine for high-quality synthesis"""
+
+    def _load_phoonnx(self) -> None:
         try:
-            # Initialize phoonnx with optimized settings
-            # This is a placeholder - actual implementation would load ONNX models
             logger.info("phoonnx TTS engine loaded (placeholder)")
             self.is_loaded = True
             self.engine_type = "phoonnx"
-            
-            # Load default voice model
-            self._load_voice_model(self.voice)
-            
-        except Exception as e:
-            logger.error(f"Failed to load phoonnx: {e}")
-            # Fallback to OVOS
+            self.voice_cache = {}
+        except Exception as exc:
+            logger.error(f"Failed to load phoonnx: {exc}")
             if OVOS_AVAILABLE:
                 self._load_ovos_tts()
-    
-    def _load_voice_model(self, voice_name: str):
-        """Load specific voice model for phoonnx"""
-        if voice_name not in self.voice_cache:
-            # Placeholder for actual phoonnx model loading
-            # In real implementation, this would load ONNX models from HuggingFace
-            logger.info(f"Loading phoonnx voice model: {voice_name}")
-            self.voice_cache[voice_name] = {
-                'model_path': f"path/to/{voice_name}.onnx",
-                'config': {'sample_rate': self.sample_rate}
-            }
-    
-    def _load_ovos_tts(self):
-        """Load OVOS TTS plugin with optimization"""
+
+    def _load_ovos_tts(self) -> None:
         try:
-            # Load with specific configuration for real-time use
             config = {
-                'pulse_duck': False,  # Disable audio ducking for faster response
-                'audio_ext': 'wav',   # Use WAV for better quality
-                'ssml_tags': ['speak', 'prosody', 'break']  # Supported SSML tags
+                'pulse_duck': False,
+                'audio_ext': 'wav',
+                'ssml_tags': ['speak', 'prosody', 'break']
             }
-            
             self.engine = OVOSTTSFactory.create(config)
             self.is_loaded = True
             self.engine_type = "ovos"
             logger.info("OVOS TTS plugin loaded with optimizations")
-        except Exception as e:
-            logger.error(f"Failed to load OVOS TTS: {e}")
-    
-    async def synthesize(self, text: str, voice: Optional[str] = None, streaming: bool = False) -> dict:
-        """Enhanced text-to-speech synthesis with metadata"""
+        except Exception as exc:
+            logger.error(f"Failed to load OVOS TTS: {exc}")
+
+    async def synthesize(self, text: str, voice: Optional[str] = None, speed: Optional[float] = None,
+                         streaming: bool = False) -> dict:
         if not self.is_loaded or not text.strip():
             return {'audio': None, 'sample_rate': self.sample_rate, 'processing_time': 0.0, 'voice': voice}
-            
+
         start_time = time.time()
         selected_voice = voice or self.voice
-        
+        selected_speed = float(speed) if speed is not None else self.speed
+
         try:
-            # Clean and prepare text
             clean_text = self._prepare_text(text)
-            
-            if streaming and self.streaming_enabled:
-                result = await self._synthesize_streaming(clean_text, selected_voice)
+
+            if self.engine_type == "kokoro":
+                audio_data = await self._kokoro_synthesize(clean_text, selected_voice, selected_speed)
+            elif self.engine_type == "phoonnx":
+                loop = asyncio.get_event_loop()
+                audio_data = await loop.run_in_executor(None, self._phoonnx_synthesize, clean_text, selected_voice)
             else:
-                result = await self._synthesize_batch(clean_text, selected_voice)
-            
+                loop = asyncio.get_event_loop()
+                audio_data = await loop.run_in_executor(None, self._ovos_synthesize, clean_text, selected_voice)
+
             processing_time = time.time() - start_time
-            result['processing_time'] = processing_time
-            
-            if result['audio']:
-                logger.info(f"TTS synthesized '{text[:30]}...' in {processing_time:.3f}s "
-                          f"({len(result['audio'])} bytes, voice: {selected_voice})")
-            
+
+            result = {
+                'audio': audio_data,
+                'sample_rate': self.sample_rate,
+                'voice': selected_voice,
+                'speed': selected_speed,
+                'format': 'wav',
+                'processing_time': processing_time
+            }
+
+            if audio_data:
+                logger.info(
+                    "TTS synthesized '%s' in %.3fs (voice=%s speed=%.2f bytes=%s)",
+                    clean_text[:30],
+                    processing_time,
+                    selected_voice,
+                    selected_speed,
+                    len(audio_data)
+                )
+
             return result
-            
-        except Exception as e:
-            logger.error(f"TTS synthesis error: {e}")
-            return {'audio': None, 'sample_rate': self.sample_rate, 'processing_time': time.time() - start_time, 'voice': selected_voice}
-    
+        except Exception as exc:
+            logger.error(f"TTS synthesis error: {exc}")
+            return {
+                'audio': None,
+                'sample_rate': self.sample_rate,
+                'voice': selected_voice,
+                'speed': selected_speed,
+                'format': 'wav',
+                'processing_time': time.time() - start_time,
+            }
+
     def _prepare_text(self, text: str) -> str:
-        """Clean and prepare text for TTS"""
-        # Remove extra whitespace
         text = ' '.join(text.split())
-        
-        # Basic text normalization for better TTS
-        text = text.replace('&', ' and ')
-        text = text.replace('@', ' at ')
-        text = text.replace('#', ' hash ')
-        
-        # Ensure proper punctuation for natural speech
+        text = text.replace('&', ' and ').replace('@', ' at ').replace('#', ' hash ')
         if text and text[-1] not in '.!?':
             text += '.'
-        
         return text
-    
-    async def _synthesize_streaming(self, text: str, voice: str) -> dict:
-        """Streaming TTS synthesis for real-time output"""
-        # For now, fall back to batch synthesis
-        # Real streaming would synthesize and return audio chunks as they're generated
-        return await self._synthesize_batch(text, voice)
-    
-    async def _synthesize_batch(self, text: str, voice: str) -> dict:
-        """Batch TTS synthesis"""
-        loop = asyncio.get_event_loop()
-        
-        if hasattr(self, 'engine_type') and self.engine_type == "phoonnx":
-            # Use phoonnx synthesis
-            audio_data = await loop.run_in_executor(None, self._phoonnx_synthesize, text, voice)
-        else:
-            # Use OVOS synthesis
-            audio_data = await loop.run_in_executor(None, self._ovos_synthesize, text, voice)
-        
-        return {
-            'audio': audio_data,
-            'sample_rate': self.sample_rate,
-            'voice': voice,
-            'format': 'wav'
-        }
-    
-    def _phoonnx_synthesize(self, text: str, voice: str) -> Optional[bytes]:
-        """phoonnx TTS synthesis (placeholder implementation)"""
-        try:
-            # Placeholder for actual phoonnx synthesis
-            # Real implementation would use ONNX runtime with phoonnx models
-            logger.info(f"phoonnx synthesizing: '{text}' with voice '{voice}'")
-            
-            # Return empty audio for now - would be actual synthesis in real implementation
-            return b''  # Placeholder
-            
-        except Exception as e:
-            logger.error(f"phoonnx synthesis error: {e}")
+
+    async def _kokoro_synthesize(self, text: str, voice: str, speed: float) -> Optional[bytes]:
+        if not self.engine:
             return None
-    
+
+        if voice not in self.available_voices and self.available_voices:
+            logger.warning("Voice '%s' not found; falling back to '%s'", voice, self.available_voices[0])
+            voice = self.available_voices[0]
+
+        audio_frames = []
+        sample_rate = self.sample_rate
+
+        try:
+            async for frame, sr in self.engine.create_stream(text=text, voice=voice, speed=speed):
+                sample_rate = sr
+                audio_frames.append(frame)
+
+            if not audio_frames:
+                return None
+
+            audio_array = np.concatenate(audio_frames, axis=0)
+            buffer = io.BytesIO()
+            sf.write(buffer, audio_array, sample_rate, format="WAV")
+            return buffer.getvalue()
+        except Exception as exc:
+            logger.error(f"Kokoro synthesis error: {exc}")
+            return None
+
+    def _phoonnx_synthesize(self, text: str, voice: str) -> Optional[bytes]:
+        try:
+            logger.info("phoonnx synthesizing: '%s' with voice '%s'", text, voice)
+            return b''
+        except Exception as exc:
+            logger.error(f"phoonnx synthesis error: {exc}")
+            return None
+
     def _ovos_synthesize(self, text: str, voice: str) -> Optional[bytes]:
-        """OVOS TTS synthesis"""
         try:
             if OVOS_AVAILABLE and hasattr(self.engine, 'get_tts'):
-                audio_file, phonemes = self.engine.get_tts(text, None)
-                
-                # Read the generated audio file
+                audio_file, _phonemes = self.engine.get_tts(text, None)
                 if audio_file and Path(audio_file).exists():
-                    with open(audio_file, 'rb') as f:
-                        audio_data = f.read()
-                    
-                    # Clean up temporary file
+                    with open(audio_file, 'rb') as fh:
+                        audio_data = fh.read()
                     Path(audio_file).unlink(missing_ok=True)
-                    
                     return audio_data
-            
             return None
-            
-        except Exception as e:
-            logger.error(f"OVOS TTS synthesis error: {e}")
+        except Exception as exc:
+            logger.error(f"OVOS TTS synthesis error: {exc}")
             return None
-    
+
     async def synthesize_ssml(self, ssml: str, voice: Optional[str] = None) -> dict:
-        """Synthesize SSML markup for enhanced speech control"""
-        # Extract plain text from SSML for now
-        # Real implementation would parse SSML tags
         import re
         plain_text = re.sub(r'<[^>]+>', '', ssml)
         return await self.synthesize(plain_text, voice)
-    
+
     def get_available_voices(self) -> list:
-        """Get list of available voices"""
-        if hasattr(self, 'engine_type') and self.engine_type == "phoonnx":
-            # Return phoonnx voices
-            return list(self.voice_cache.keys()) + ['default', 'miro', 'dii']  # Example voices
-        else:
-            # Return OVOS voices
-            return ['default']  # Placeholder
-    
-    def set_voice(self, voice: str):
-        """Change the active voice"""
+        if self.engine_type == "kokoro":
+            return self.available_voices or [self.voice]
+        if self.engine_type == "phoonnx":
+            voices = list(getattr(self, 'voice_cache', {}).keys())
+            return voices or ['default']
+        return ['default']
+
+    def set_voice(self, voice: str) -> None:
+        if self.engine_type == "kokoro":
+            if voice in self.get_available_voices():
+                self.voice = voice
+                logger.info("Voice changed to: %s", voice)
+            else:
+                logger.warning("Voice '%s' not available", voice)
+            return
+
         if voice in self.get_available_voices():
             self.voice = voice
-            if hasattr(self, 'engine_type') and self.engine_type == "phoonnx":
-                self._load_voice_model(voice)
-            logger.info(f"Voice changed to: {voice}")
+            logger.info("Voice changed to: %s", voice)
         else:
-            logger.warning(f"Voice '{voice}' not available")
+            logger.warning("Voice '%s' not available", voice)
+
+    def set_speed(self, speed: float) -> None:
+        try:
+            self.speed = max(0.5, min(float(speed), 2.5))
+            logger.info("Speech speed set to %.2f", self.speed)
+        except (TypeError, ValueError):
+            logger.warning("Invalid speed value: %s", speed)
 
 class SpeechPipeline:
     """Enhanced speech processing pipeline with OpenAI-compatible features"""
@@ -842,7 +914,9 @@ class SpeechPipeline:
             'avg_processing_time': 0.0,
             'errors': 0
         }
-        
+        self.current_voice = self.tts_engine.voice
+        self.current_speed = self.tts_engine.speed
+
         logger.info(f"Enhanced speech pipeline initialized for session {self.session_id}")
     
     async def process_audio_chunk(self, audio_data: bytes) -> dict:
@@ -972,13 +1046,16 @@ class SpeechPipeline:
         finally:
             self.is_processing = False
     
-    async def synthesize_response(self, text: str, voice: Optional[str] = None, streaming: bool = False) -> dict:
+    async def synthesize_response(self, text: str, voice: Optional[str] = None,
+                                  speed: Optional[float] = None, streaming: bool = False) -> dict:
         """Enhanced speech synthesis with metadata and streaming support"""
         try:
             self.conversation_state['response_pending'] = True
             
             # Synthesize with enhanced options
-            synthesis_result = await self.tts_engine.synthesize(text, voice, streaming)
+            selected_voice = voice or self.current_voice
+            selected_speed = speed if speed is not None else self.current_speed
+            synthesis_result = await self.tts_engine.synthesize(text, selected_voice, selected_speed, streaming)
             
             # Update metrics
             self.metrics['total_synthesis'] += 1
@@ -1025,7 +1102,8 @@ class SpeechPipeline:
             'stt_status': stt_info,
             'tts_status': {
                 'available_voices': self.tts_engine.get_available_voices(),
-                'current_voice': self.tts_engine.voice
+                'current_voice': self.tts_engine.voice,
+                'current_speed': self.tts_engine.speed
             },
             'metrics': self.metrics,
             'config': {
@@ -1054,6 +1132,8 @@ class SpeechPipeline:
         
         # Reset audio processor state
         self.audio_processor.reset_conversation_state()
+        self.current_voice = self.tts_engine.voice
+        self.current_speed = self.tts_engine.speed
         
         logger.info(f"Pipeline reset for session {self.session_id}")
     
@@ -1080,7 +1160,14 @@ class SpeechPipeline:
     def set_voice(self, voice: str):
         """Set TTS voice"""
         self.tts_engine.set_voice(voice)
-        logger.info(f"Voice set to {voice} for session {self.session_id}")
+        self.current_voice = self.tts_engine.voice
+        logger.info(f"Voice set to {self.current_voice} for session {self.session_id}")
+
+    def set_speed(self, speed: float):
+        """Set TTS playback speed"""
+        self.tts_engine.set_speed(speed)
+        self.current_speed = self.tts_engine.speed
+        logger.info(f"Speech speed set to {self.current_speed} for session {self.session_id}")
 
 # Factory function for easy initialization
 def create_speech_pipeline(config: dict = None, session_id: str = None) -> SpeechPipeline:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+# Standard library imports – sorted alphabetically
 import base64
 import json
 import logging
@@ -9,10 +10,21 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional
 
+# Optional heavy deps used when TTS engines are enabled
+try:
+    import numpy as np  # type: ignore
+except Exception:  # pragma: no cover - optional
+    np = None  # type: ignore
+try:
+    import soundfile as sf  # type: ignore
+except Exception:  # pragma: no cover - optional
+    sf = None  # type: ignore
+
 from flask import g, request
 from flask_sock import Sock
 from simple_websocket import ConnectionClosed
 
+# Local imports – sorted alphabetically for lint compliance
 from ..dependencies import (
     get_app_config,
     get_opa_client,
@@ -24,6 +36,7 @@ from ..observability.metrics import policy_denials
 from ..schemas.realtime import RealtimeSessionResource
 from ..services.session_service import SessionService
 from ..services.token_service import ClientSecretRecord
+from ..tts.provider import get_provider  # TTS provider abstraction
 from ..utils.auth import ensure_request_id
 
 logger = logging.getLogger(__name__)
@@ -211,6 +224,7 @@ class RealtimeWebsocketConnection:
         self._is_speaking = False
         self._audio_buffer = bytearray()
         self._last_user_transcript: Optional[str] = None
+        self._cancel_current: bool = False
 
     def run(self) -> None:
         logger.info(
@@ -342,6 +356,14 @@ class RealtimeWebsocketConnection:
                 "item_id": audio_item_id,
             }
         )
+        # Compatibility event name expected by some clients
+        self._send_event(
+            {
+                "type": "input_audio_buffer.commit",
+                "previous_item_id": None if not self._conversation_order else self._conversation_order[-1],
+                "item_id": audio_item_id,
+            }
+        )
 
     def handle_conversation_item_create(self, payload: Dict[str, Any]) -> None:
         item = payload.get("item", {})
@@ -352,6 +374,8 @@ class RealtimeWebsocketConnection:
         self._emit_conversation_item(role, content, metadata=metadata)
 
     def handle_response_create(self, payload: Dict[str, Any]) -> None:
+        # Reset cancel flag for this response
+        self._cancel_current = False
         response_id = _generate_response_id()
         item_id = _generate_item_id()
         self._send_event(
@@ -368,7 +392,14 @@ class RealtimeWebsocketConnection:
         )
 
         user_text = self._last_user_transcript or "Hello"
-        assistant_text = f"I heard you say: {user_text}. How can I help you?"
+        # Try real LLM response via Groq; fall back to a simple echo if it fails
+        assistant_text = None
+        try:
+            assistant_text = _call_llm(self._session.id, user_text)
+        except Exception as exc:
+            logger.warning("LLM generation failed; using fallback", exc_info=exc)
+        if not assistant_text:
+            assistant_text = f"I heard you say: {user_text}. How can I help you?"
 
         response_item = {
             "id": item_id,
@@ -406,48 +437,85 @@ class RealtimeWebsocketConnection:
             }
         )
 
-        audio_bytes = b"\x00" * 1024
-        audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
-        self._send_event(
-            {
-                "type": "response.audio.delta",
-                "response_id": response_id,
-                "item_id": item_id,
-                "output_index": 0,
-                "content_index": 0,
-                "delta": audio_b64,
-            }
-        )
-        self._send_event(
-            {
-                "type": "response.audio.done",
-                "response_id": response_id,
-                "item_id": item_id,
-                "output_index": 0,
-                "content_index": 0,
-            }
-        )
+        # -----------------------------------------------------------------
+        # TTS – use the new provider abstraction (Kokoro > Piper > Espeak).
+        # The provider itself handles engine selection, model loading, and
+        # fallback logic.  We only need to stream the base64 chunks to the
+        # client and respect the cancel flag.
+        # -----------------------------------------------------------------
+        # Gather session‑level TTS overrides (voice, speed) – the provider will
+        # fall back to environment defaults if these are ``None``.
+        sess_cfg = (
+            self._session.session_config or {}
+        ).get("tts", {}) if hasattr(self._session, "session_config") else {}
+        sess_voice = sess_cfg.get("voice") if isinstance(sess_cfg, dict) else None
+        sess_speed = sess_cfg.get("speed") if isinstance(sess_cfg, dict) else None
 
-        self._send_event(
-            {
-                "type": "response.done",
-                "response": {
-                    "id": response_id,
-                    "object": "realtime.response",
-                    "status": "completed",
-                    "output": [response_item],
-                },
-            }
-        )
+        provider = get_provider()
+        audio_streamed = False
+
+        def _run_provider():
+            """Execute the async TTS generator synchronously.
+
+            The ``provider.synthesize`` method returns an async generator that
+            yields base64‑encoded audio chunks.  Because ``handle_response_create``
+            is a regular (non‑async) method, we need to bridge the async call.
+            ``_run_async`` creates a temporary event loop and runs the coroutine
+            to completion, allowing us to stream the chunks and respect the
+            cancel flag.
+            """
+
+            async def _inner():
+                nonlocal audio_streamed
+                async for chunk_b64 in provider.synthesize(
+                    assistant_text,
+                    voice=sess_voice,
+                    speed=sess_speed,
+                    cancel_flag=self,
+                ):
+                    # Send each chunk as a delta event
+                    self._send_event(
+                        {
+                            "type": "response.audio.delta",
+                            "response_id": response_id,
+                            "item_id": item_id,
+                            "output_index": 0,
+                            "content_index": 0,
+                            "delta": chunk_b64,
+                        }
+                    )
+                    audio_streamed = True
+
+            # Run the async inner coroutine synchronously.
+            _run_async(_inner())
+
+        try:
+            _run_provider()
+        except Exception as exc:  # pragma: no cover – defensive
+            logger.warning(
+                "TTS provider failed, falling back to silence", exc_info=exc
+            )
+
+        # If the provider yielded nothing (e.g., all engines unavailable),
+        # send a tiny silence buffer so the client still receives a response.
+        if not audio_streamed:
+            silence_b64 = base64.b64encode(b"\x00" * 1024).decode("utf-8")
+            self._send_event(
+                {
+                    "type": "response.audio.delta",
+                    "response_id": response_id,
+                    "item_id": item_id,
+                    "output_index": 0,
+                    "content_index": 0,
+                    "delta": silence_b64,
+                }
+            )
 
     def handle_response_cancel(self, payload: Dict[str, Any]) -> None:
+        # Mark cancel and notify client
+        self._cancel_current = True
         response_id = payload.get("response_id") or _generate_response_id()
-        self._send_event(
-            {
-                "type": "response.cancelled",
-                "response_id": response_id,
-            }
-        )
+        self._send_event({"type": "response.cancelled", "response_id": response_id})
 
     # Internal helpers ----------------------------------------------------------------
 
@@ -510,6 +578,46 @@ def _generate_item_id() -> str:
 
 def _generate_response_id() -> str:
     return f"resp_{uuid.uuid4().hex[:16]}"
+
+
+def _run_async(coro):
+    """Run an async coroutine from sync context with a fresh event loop if needed."""
+    try:
+        import asyncio
+        try:
+            return asyncio.run(coro)
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            try:
+                asyncio.set_event_loop(loop)
+                return loop.run_until_complete(coro)
+            finally:
+                loop.close()
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.exception("Failed to execute async coroutine", exc_info=exc)
+        return None
+
+
+def _call_llm(session_id: str, user_text: str) -> Optional[str]:
+    """Call the project LLM integration dynamically without brittle relative imports."""
+    try:
+        # Lazy import to avoid package path issues when running inside Docker/tests
+        import importlib
+        import os
+        import sys
+        # Add repo root to path: this file is enterprise/app/transports/realtime_ws.py
+        here = os.path.dirname(__file__)
+        repo_root = os.path.abspath(os.path.join(here, "../../..", ".."))
+        if repo_root not in sys.path:
+            sys.path.insert(0, repo_root)
+        llm_mod = importlib.import_module("llm_integration")
+        generate = getattr(llm_mod, "generate_ai_response", None)
+        if not generate:
+            return None
+        return _run_async(generate(session_id, user_text))
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("LLM import/call failed", exc_info=exc)
+        return None
 
 
 __all__ = ["register_realtime_websocket", "sock"]

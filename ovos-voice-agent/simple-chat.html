@@ -265,7 +265,8 @@
             try {
                 updateStatus('Connecting...', 'thinking');
                 // 1️⃣ Get a temporary client secret
-                const secretResp = await fetch('http://localhost:20000/v1/realtime/client_secrets', {
+                const OVOS_CFG = window.OVOS_CONFIG || { VOICE_AGENT_BASE: 'http://localhost:60200', VOICE_AGENT_WS_BASE: 'ws://localhost:60200' };
+                const secretResp = await fetch(`${OVOS_CFG.VOICE_AGENT_BASE}/v1/realtime/client_secrets`, {
                     method: 'POST',
                     headers: {
                         // Use the API key defined in settings.docker.env
@@ -279,10 +280,10 @@
                 const clientSecret = secretData.value;
 
                 // 2️⃣ Create a realtime session using that secret
-                const sessResp = await fetch('http://localhost:20000/v1/realtime/sessions', {
+                const sessResp = await fetch(`${OVOS_CFG.VOICE_AGENT_BASE}/v1/realtime/sessions`, {
                     method: 'POST',
                     headers: {
-                        'Authorization': 'Bearer test-token',
+                        'Authorization': 'Bearer sk-local-token',
                         'X-Request-Id': 'req_' + crypto.randomUUID().replace(/-/g, ''),
                         'Content-Type': 'application/json'
                     },
@@ -297,7 +298,7 @@
                 window.__ovosSessionId = sessionId;
 
                 // 3️⃣ Open the WebSocket with the secret as a Bearer token
-                const wsUrl = 'ws://localhost:20000/v1/realtime';
+                const wsUrl = `${OVOS_CFG.VOICE_AGENT_WS_BASE}/v1/realtime`;
                 const wsHeaders = [
                     ['Authorization', 'Bearer ' + clientSecret]
                 ];
@@ -559,7 +560,7 @@
         async function testConnection() {
             try {
                 // Health check now uses the same 20000 port
-                const response = await fetch('http://localhost:20000/health');
+                const response = await fetch(`${OVOS_CFG.VOICE_AGENT_BASE}/health`);
                 const data = await response.json();
                 
                 if (data.status === 'healthy') {

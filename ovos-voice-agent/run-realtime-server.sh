@@ -6,6 +6,16 @@ echo ""
 
 cd "$(dirname "$0")/sprint4-websocket"
 
+# Load local environment overrides (e.g., GROQ_API_KEY) if present
+ENV_FILE="../.env.local"
+if [ -f "$ENV_FILE" ]; then
+    echo "Loading environment from $ENV_FILE"
+    set -a
+    # shellcheck source=/dev/null
+    source "$ENV_FILE"
+    set +a
+fi
+
 # Check if virtual environment exists
 if [ ! -d "venv" ]; then
     echo "Creating virtual environment..."

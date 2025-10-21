@@ -213,6 +213,9 @@
             <button class="btn-test" onclick="testAPI()">
                 Test API
             </button>
+            <button class="btn-test" onclick="sendText()" id="sendTextBtn" disabled>
+                Send Text
+            </button>
         </div>
         
         <button class="mic-button" id="micBtn" onclick="toggleRecording()" disabled>
@@ -261,13 +264,14 @@
             
             try {
                 // Test health endpoint
-                const healthResp = await fetch('http://localhost:20000/health');
+                const OVOS_CFG = window.OVOS_CONFIG || { VOICE_AGENT_BASE: 'http://localhost:60200', VOICE_AGENT_WS_BASE: 'ws://localhost:60200' };
+                const healthResp = await fetch(`${OVOS_CFG.VOICE_AGENT_BASE}/health`);
                 if (!healthResp.ok) throw new Error('Health check failed');
                 const health = await healthResp.json();
                 log(`✅ Health: ${health.status}`, 'success');
                 
                 // Test client secret endpoint
-                const secretResp = await fetch('http://localhost:20000/v1/realtime/client_secrets', {
+                const secretResp = await fetch(`${OVOS_CFG.VOICE_AGENT_BASE}/v1/realtime/client_secrets`, {
                     method: 'POST',
                     headers: {
                         'Authorization': 'Bearer sk-local-token',
@@ -297,7 +301,7 @@
                 log('Getting client secret...', 'info');
                 
                 // Get client secret
-                const secretResp = await fetch('http://localhost:20000/v1/realtime/client_secrets', {
+                const secretResp = await fetch(`${OVOS_CFG.VOICE_AGENT_BASE}/v1/realtime/client_secrets`, {
                     method: 'POST',
                     headers: {
                         'Authorization': 'Bearer sk-local-token',
@@ -316,7 +320,7 @@
                 
                 // Create session
                 log('Creating session...', 'info');
-                const sessionResp = await fetch('http://localhost:20000/v1/realtime/sessions', {
+                const sessionResp = await fetch(`${OVOS_CFG.VOICE_AGENT_BASE}/v1/realtime/sessions`, {
                     method: 'POST',
                     headers: {
                         'Authorization': 'Bearer sk-local-token',
@@ -334,7 +338,7 @@
                 
                 // Connect WebSocket
                 log('Opening WebSocket...', 'info');
-                const wsUrl = `ws://localhost:20000/v1/realtime?access_token=${encodeURIComponent(clientSecret)}`;
+                const wsUrl = `${OVOS_CFG.VOICE_AGENT_WS_BASE}/v1/realtime?access_token=${encodeURIComponent(clientSecret)}`;
                 ws = new WebSocket(wsUrl);
                 
                 ws.onopen = () => {
@@ -343,11 +347,64 @@
                     connectBtn.disabled = true;
                     disconnectBtn.disabled = false;
                     micBtn.disabled = false;
+                    document.getElementById('sendTextBtn').disabled = false;
                 };
                 
                 ws.onmessage = (event) => {
-                    const data = JSON.parse(event.data);
-                    log(`📨 Received: ${data.type}`, 'info');
+                    let data;
+                    try {
+                        data = JSON.parse(event.data);
+                    } catch (e) {
+                        log('❌ Invalid WS JSON', 'error');
+                        return;
+                    }
+                    const t = data.type;
+                    if (!t) {
+                        log('📨 Received unknown event', 'info');
+                        return;
+                    }
+                    // Always log event type for traceability
+                    log(`📨 ${t}`, 'info');
+                    // Show errors prominently
+                    if (t === 'error' && data.error) {
+                        log(`❌ ${data.error.code || 'error'}: ${data.error.message}`, 'error');
+                        return;
+                    }
+                    // Display assistant text as it streams
+                    if (t === 'response.audio_transcript.delta' && data.delta) {
+                        log(`🤖 ${data.delta}`, 'success');
+                        return;
+                    }
+                    // Some implementations may send output_text delta events
+                    if (t === 'response.output_text.delta' && data.delta) {
+                        log(`🤖 ${data.delta}`, 'success');
+                        return;
+                    }
+                    // When a full assistant item is added, extract its text
+                    if (t === 'response.output_item.added' && data.item && Array.isArray(data.item.content)) {
+                        const part = data.item.content.find(p => p.type === 'output_text' && p.text);
+                        if (part && part.text) {
+                            log(`🤖 ${part.text}`, 'success');
+                        }
+                        return;
+                    }
+                    // Play audio when provided as a single delta containing a WAV payload
+                    if (t === 'response.audio.delta' && data.delta) {
+                        try {
+                            const base64 = data.delta;
+                            const bin = atob(base64);
+                            const bytes = new Uint8Array(bin.length);
+                            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                            const blob = new Blob([bytes], { type: 'audio/wav' });
+                            const url = URL.createObjectURL(blob);
+                            const audio = new Audio(url);
+                            audio.play().catch(() => {/* ignore auto-play block */});
+                            log('🔊 Playing assistant audio', 'success');
+                        } catch (e) {
+                            log('❌ Failed to play audio', 'error');
+                        }
+                        return;
+                    }
                     console.log('WS message:', data);
                 };
                 
@@ -362,6 +419,7 @@
                     connectBtn.disabled = false;
                     disconnectBtn.disabled = true;
                     micBtn.disabled = true;
+                    document.getElementById('sendTextBtn').disabled = true;
                     ws = null;
                 };
                 
@@ -378,6 +436,21 @@
                 ws = null;
             }
             log('Disconnected', 'info');
+        }
+
+        function sendText() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('WS not connected', 'error');
+                return;
+            }
+            const text = prompt('Say something to the assistant:', 'Hello there');
+            if (!text) return;
+            ws.send(JSON.stringify({
+                type: 'conversation.item.create',
+                item: { role: 'user', content: [{ type: 'input_text', text }] }
+            }));
+            setTimeout(() => ws.send(JSON.stringify({ type: 'response.create' })), 200);
+            log('Sent input_text and requested response', 'info');
         }
         
         async function toggleRecording() {

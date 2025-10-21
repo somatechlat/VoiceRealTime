@@ -27,7 +27,11 @@ sys.path.append('../sprint3-api')
 sys.path.append('../')
 from speech_pipeline import create_realtime_pipeline, SpeechPipeline, TTSEngine
 from llm_integration import generate_ai_response
+from ovos_voice_agent import config
 from enterprise.app.tts.provider import TTSProvider, get_provider
+from function_calling import get_function_engine
+from rate_limiter import RateLimiter, count_tokens
+from audio_codecs import AudioCodec, AudioFormatConverter
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -105,11 +109,11 @@ class RealtimeConnectionManager:
             "input_audio_transcription": {
                 "model": "whisper-1"
             },
-            "voice": pipeline.tts_engine.voice,
-            "tts": {
                 "voice": pipeline.tts_engine.voice,
-                "speed": pipeline.tts_engine.speed,
-            },
+                "tts": {
+                    "voice": pipeline.tts_engine.voice,
+                    "speed": pipeline.tts_engine.speed,
+                },
             "temperature": 0.8,
             "max_response_output_tokens": "inf"
         }
@@ -186,7 +190,7 @@ def _load_default_voice_catalog() -> tuple[list[str], str, float]:
         return voices, default_voice, default_speed
     except Exception as exc:
         logger.error("Failed to initialize default voice catalog: %s", exc)
-        return ["am_onyx"], "am_onyx", 1.1
+        return [config.KOKORO_VOICE], config.KOKORO_VOICE, config.KOKORO_SPEED
 
 
 def get_voice_catalog() -> tuple[list[str], str, float]:
@@ -204,13 +208,23 @@ class RealtimeEventProcessor:
     
     def __init__(self, manager: RealtimeConnectionManager):
         self.manager = manager
+        self.function_engine = get_function_engine()
+        self.rate_limiter = RateLimiter()
+        self.audio_converter = AudioFormatConverter()
     
     async def process_event(self, session_id: str, event: dict):
         """Process incoming WebSocket event"""
         event_type = event.get("type")
         
         if not event_type:
-            await self.send_error(session_id, "missing_event_type", "Event type is required")
+            await self.send_error(session_id, "invalid_request_error", "Event type is required", "type")
+            return
+        
+        # Check rate limits
+        allowed, limits = self.rate_limiter.check_limit(session_id, tokens=10)
+        if not allowed:
+            await self.send_error(session_id, "rate_limit_error", "Rate limit exceeded")
+            await self.send_rate_limit_update(session_id)
             return
         
         try:
@@ -234,7 +248,10 @@ class RealtimeEventProcessor:
             elif event_type == "response.cancel":
                 await self.handle_response_cancel(session_id, event)
             else:
-                await self.send_error(session_id, "unknown_event", f"Unknown event type: {event_type}")
+                await self.send_error(session_id, "invalid_request_error", f"Unknown event type: {event_type}", "type")
+            
+            # Consume rate limit after successful processing
+            self.rate_limiter.consume(session_id, tokens=10)
                 
         except Exception as e:
             logger.error(f"Error processing event {event_type} for session {session_id}: {e}")
@@ -373,6 +390,15 @@ class RealtimeEventProcessor:
     async def handle_transcription_completed(self, session_id: str, transcription: dict):
         """Handle completed transcription"""
         item_id = f"item_{uuid.uuid4().hex[:16]}"
+        text = transcription.get('text', '')
+        
+        # Send transcription.completed event
+        await self.manager.send_event(session_id, {
+            "type": "conversation.item.input_audio_transcription.completed",
+            "item_id": item_id,
+            "content_index": 0,
+            "transcript": text
+        })
         
         # Create conversation item
         conversation_item = {
@@ -383,8 +409,8 @@ class RealtimeEventProcessor:
             "role": "user",
             "content": [{
                 "type": "input_audio",
-                "transcript": transcription.get('text', ''),
-                "audio": None  # Audio data not included in response
+                "transcript": text,
+                "audio": None
             }]
         }
         
@@ -404,8 +430,18 @@ class RealtimeEventProcessor:
             "item_id": item_id
         })
         
-        # Trigger response generation
-        await self.generate_response(session_id, transcription.get('text', ''))
+        # Check for function calls
+        session_data = self.manager.session_data.get(session_id, {})
+        tools = session_data.get("tools", [])
+        
+        if tools:
+            function_call = await self.function_engine.detect_function_call(text, tools)
+            if function_call:
+                await self.handle_function_call(session_id, function_call, text)
+                return
+        
+        # Normal response generation
+        await self.generate_response(session_id, text)
     
     async def handle_conversation_item_create(self, session_id: str, event: dict):
         """Handle conversation.item.create event"""
@@ -550,10 +586,31 @@ class RealtimeEventProcessor:
             await self.send_error(session_id, "response_error", str(e))
     
     async def generate_response_text(self, session_id: str, user_input: str) -> str:
-        """Generate response text using Groq LLM integration"""
+        """Generate response text using LLM with session config"""
         try:
-            # Use Groq API for intelligent responses
-            response = await generate_ai_response(session_id, user_input)
+            # Get session config
+            session_data = self.manager.session_data.get(session_id, {})
+            instructions = session_data.get("instructions", "You are a helpful assistant.")
+            temperature = session_data.get("temperature", 0.8)
+            max_tokens = session_data.get("max_response_output_tokens", "inf")
+            
+            # Consume tokens for input
+            input_tokens = count_tokens(user_input)
+            self.rate_limiter.consume(session_id, tokens=input_tokens)
+            
+            # Use LLM with config
+            response = await generate_ai_response(
+                session_id, 
+                user_input,
+                instructions=instructions,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+            
+            # Consume tokens for output
+            output_tokens = count_tokens(response)
+            self.rate_limiter.consume(session_id, tokens=output_tokens)
+            
             return response
         except Exception as e:
             logger.error(f"LLM generation error: {e}")
@@ -576,8 +633,13 @@ class RealtimeEventProcessor:
             if not pipeline:
                 return
             
-            # Get session voice settings
+            # Get session config
             session_data = self.manager.session_data.get(session_id, {})
+            
+            # Check output modalities
+            modalities = session_data.get("output_modalities", ["audio"])
+            
+            # Get voice settings
             tts_cfg = session_data.get("tts", {})
             voice = tts_cfg.get("voice") or session_data.get("voice")
             speed = tts_cfg.get("speed") or getattr(pipeline, "current_speed", None)
@@ -611,8 +673,24 @@ class RealtimeEventProcessor:
 
             audio_streamed = False
             transcript_sent = False
-
-            if provider is not None:
+            
+            # Send transcript if text modality enabled
+            if "text" in modalities and not transcript_sent:
+                await self.manager.send_event(
+                    session_id,
+                    {
+                        "type": "response.audio_transcript.delta",
+                        "response_id": response_id,
+                        "item_id": item_id,
+                        "output_index": 0,
+                        "content_index": 0,
+                        "delta": text,
+                    },
+                )
+                transcript_sent = True
+            
+            # Generate audio only if audio modality enabled
+            if "audio" in modalities and provider is not None:
                 try:
                     async for chunk_b64 in provider.synthesize(
                         text,
@@ -792,7 +870,125 @@ class RealtimeEventProcessor:
 
         conversation_state["response"] = None
     
-    async def send_error(self, session_id: str, error_type: str, message: str):
+    async def send_rate_limit_update(self, session_id: str):
+        """Send rate_limits.updated event"""
+        limits = self.rate_limiter.get_limits(session_id)
+        
+        await self.manager.send_event(session_id, {
+            "type": "rate_limits.updated",
+            "rate_limits": [
+                {
+                    "name": "requests",
+                    "limit": limits["requests_limit"],
+                    "remaining": limits["requests_remaining"],
+                    "reset_seconds": limits["reset_seconds"]
+                },
+                {
+                    "name": "tokens",
+                    "limit": limits["tokens_limit"],
+                    "remaining": limits["tokens_remaining"],
+                    "reset_seconds": limits["reset_seconds"]
+                }
+            ]
+        })
+    
+    async def handle_function_call(self, session_id: str, function_call: dict, original_text: str):
+        """Handle function call detection and execution."""
+        response_id = f"resp_{uuid.uuid4().hex[:16]}"
+        item_id = f"item_{uuid.uuid4().hex[:16]}"
+        
+        function_name = function_call["name"]
+        arguments = function_call["arguments"]
+        call_id = function_call["call_id"]
+        
+        # Send response.created
+        await self.manager.send_event(session_id, {
+            "type": "response.created",
+            "response": {
+                "id": response_id,
+                "object": "realtime.response",
+                "status": "in_progress",
+                "output": []
+            }
+        })
+        
+        # Send function_call_arguments.delta
+        args_json = json.dumps(arguments)
+        await self.manager.send_event(session_id, {
+            "type": "response.function_call_arguments.delta",
+            "response_id": response_id,
+            "item_id": item_id,
+            "output_index": 0,
+            "call_id": call_id,
+            "delta": args_json
+        })
+        
+        # Send function_call_arguments.done
+        await self.manager.send_event(session_id, {
+            "type": "response.function_call_arguments.done",
+            "response_id": response_id,
+            "item_id": item_id,
+            "output_index": 0,
+            "call_id": call_id,
+            "arguments": args_json
+        })
+        
+        # Create function_call item
+        function_call_item = {
+            "id": item_id,
+            "object": "realtime.item",
+            "type": "function_call",
+            "status": "completed",
+            "call_id": call_id,
+            "name": function_name,
+            "arguments": args_json
+        }
+        
+        conversation_state = self.manager.conversation_states.get(session_id, {})
+        conversation_state["items"].append(function_call_item)
+        
+        await self.manager.send_event(session_id, {
+            "type": "conversation.item.created",
+            "item": function_call_item
+        })
+        
+        # Execute function
+        result = await self.function_engine.execute_function(function_name, arguments)
+        
+        # Create function_call_output item
+        output_item_id = f"item_{uuid.uuid4().hex[:16]}"
+        function_output_item = {
+            "id": output_item_id,
+            "object": "realtime.item",
+            "type": "function_call_output",
+            "status": "completed",
+            "call_id": call_id,
+            "output": json.dumps(result)
+        }
+        
+        conversation_state["items"].append(function_output_item)
+        
+        await self.manager.send_event(session_id, {
+            "type": "conversation.item.created",
+            "item": function_output_item
+        })
+        
+        # Send response.done
+        await self.manager.send_event(session_id, {
+            "type": "response.done",
+            "response": {
+                "id": response_id,
+                "object": "realtime.response",
+                "status": "completed",
+                "output": [function_call_item, function_output_item]
+            }
+        })
+        
+        # Generate follow-up response with function result
+        result_text = f"Function {function_name} returned: {json.dumps(result)}"
+        await self.generate_response(session_id, result_text)
+    
+    async def send_error(self, session_id: str, error_type: str, message: str, param: str = None):
         """Send error event to client"""
         await self.manager.send_event(session_id, {
             "type": "error",
@@ -800,8 +996,8 @@ class RealtimeEventProcessor:
                 "type": error_type,
                 "code": error_type,
                 "message": message,
-                "param": None,
-                "event_id": None
+                "param": param,
+                "event_id": f"event_{uuid.uuid4().hex[:16]}"
             }
         })
 
@@ -849,9 +1045,9 @@ async def websocket_realtime(websocket: WebSocket):
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    model_dir = Path(os.getenv("KOKORO_MODEL_DIR", str(Path.cwd() / "cache" / "kokoro")))
-    model_file = os.getenv("KOKORO_MODEL_FILE", "kokoro-v1.0.onnx")
-    voices_file = os.getenv("KOKORO_VOICES_FILE", "voices-v1.0.bin")
+    model_dir = Path(os.getenv("KOKORO_MODEL_DIR", str(config.KOKORO_MODEL_DIR)))
+    model_file = os.getenv("KOKORO_MODEL_FILE", config.KOKORO_MODEL_FILE)
+    voices_file = os.getenv("KOKORO_VOICES_FILE", config.KOKORO_VOICES_FILE)
     kokoro_present = (model_dir / model_file).exists() and (model_dir / voices_file).exists()
     return {
         "status": "healthy",
@@ -893,7 +1089,7 @@ if __name__ == "__main__":
     uvicorn.run(
         app,
         host="0.0.0.0",
-        port=8001,  # Different port from REST API
+        port=int(os.getenv("PORT", config.VOICE_AGENT_PORT)),  # configurable via env
         log_level="info",
         reload=True
     )
