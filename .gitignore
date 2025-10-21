@@ -40,3 +40,65 @@ next-env.d.ts
 /public/sitemap.xml
 /public/sitemap-0.xml
 
+
+
+# --- Python / tooling / editor ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyi
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+venv.bak/
+*/venv/
+
+# pip / wheel
+pip-wheel-metadata/
+*.egg-info/
+.eggs/
+
+# Testing / coverage
+.pytest_cache/
+.tox/
+coverage.xml
+htmlcov/
+
+# mypy cache
+.mypy_cache/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Logs and runtime
+*.log
+*.sqlite3
+*.db
+
+# Secrets and env files
+.env
+.env.*
+secrets.yml
+
+# Large media (prefer Git LFS)
+*.mp4
+*.mov
+*.mkv
+*.avi
+*.wav
+*.flac
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+
+# macOS
+.DS_Store
+
