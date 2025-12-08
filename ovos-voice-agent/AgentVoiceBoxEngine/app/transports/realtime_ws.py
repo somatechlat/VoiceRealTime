@@ -28,9 +28,11 @@ from simple_websocket import ConnectionClosed
 from ..dependencies import (
     get_app_config,
     get_opa_client,
+    get_rate_limiter,
     get_session_service,
     get_token_service,
 )
+from ..services.distributed_rate_limiter import count_tokens
 from ..models.session import SessionModel
 from ..observability.metrics import policy_denials
 from ..schemas.realtime import RealtimeSessionResource
@@ -105,12 +107,16 @@ def register_realtime_websocket(app) -> None:
                 persona=None,
             )
 
+        # Get distributed rate limiter (falls back to None if Redis unavailable)
+        rate_limiter = get_rate_limiter()
+
         connection = RealtimeWebsocketConnection(
             ws=ws,
             config=config,
             session=session_model,
             session_service=session_service,
             token_record=token_record,
+            rate_limiter=rate_limiter,
         )
 
         try:
@@ -187,7 +193,29 @@ def _session_resource(model: SessionModel) -> Dict[str, Any]:
     return resource.model_dump(exclude_none=True)
 
 
-def _rate_limits_payload(rate_limits) -> Dict[str, Any]:
+def _rate_limits_payload(rate_limits, rate_limit_result=None) -> Dict[str, Any]:
+    """Build rate_limits.updated event payload.
+    
+    Args:
+        rate_limits: RateLimitSettings from config (for limits)
+        rate_limit_result: Optional RateLimitResult (for remaining)
+    """
+    if rate_limit_result:
+        return {
+            "type": "rate_limits.updated",
+            "rate_limits": {
+                "requests": {
+                    "limit": rate_limits.requests_per_minute,
+                    "remaining": rate_limit_result.requests_remaining,
+                    "reset_seconds": rate_limit_result.reset_ms // 1000,
+                },
+                "tokens": {
+                    "limit": rate_limits.tokens_per_minute,
+                    "remaining": rate_limit_result.tokens_remaining,
+                    "reset_seconds": rate_limit_result.reset_ms // 1000,
+                },
+            },
+        }
     return {
         "type": "rate_limits.updated",
         "rate_limits": {
@@ -214,17 +242,20 @@ class RealtimeWebsocketConnection:
         session: SessionModel,
         session_service: SessionService,
         token_record: ClientSecretRecord,
+        rate_limiter=None,
     ) -> None:
         self._ws = ws
         self._config = config
         self._session_service = session_service
         self._session = session
         self._token = token_record
+        self._rate_limiter = rate_limiter
         self._conversation_order: List[str] = []
         self._is_speaking = False
         self._audio_buffer = bytearray()
         self._last_user_transcript: Optional[str] = None
         self._cancel_current: bool = False
+        self._tenant_id = token_record.project_id or "default"
 
     def run(self) -> None:
         logger.info(
@@ -254,6 +285,10 @@ class RealtimeWebsocketConnection:
                 _send_error(self._ws, "validation_error", "missing_type", "Event type is required")
                 continue
 
+            # Check rate limits before processing
+            if not self._check_rate_limit(payload):
+                continue
+
             handler_name = f"handle_{event_type.replace('.', '_')}"
             handler = getattr(self, handler_name, None)
             if not handler:
@@ -275,6 +310,69 @@ class RealtimeWebsocketConnection:
                     "internal_error",
                     "Internal error processing event",
                 )
+
+    # Rate limiting -----------------------------------------------------------------
+
+    def _check_rate_limit(self, payload: Dict[str, Any]) -> bool:
+        """Check rate limits before processing an event.
+        
+        Returns True if request is allowed, False if rate limited.
+        """
+        if self._rate_limiter is None:
+            # No rate limiter configured, allow all requests
+            return True
+
+        # Estimate tokens for this request
+        tokens = 1
+        event_type = payload.get("type", "")
+        
+        # Count tokens for text content
+        if event_type == "conversation.item.create":
+            item = payload.get("item", {})
+            content = item.get("content", [])
+            for part in content:
+                text = part.get("text") or part.get("transcript") or ""
+                tokens += count_tokens(text)
+        elif event_type == "response.create":
+            # Response creation consumes more tokens
+            tokens = 10
+
+        try:
+            # Run async rate limit check synchronously
+            result = _run_async(
+                self._rate_limiter.check_and_consume(
+                    tenant_id=self._tenant_id,
+                    identifier=self._session.id,
+                    requests=1,
+                    tokens=tokens,
+                )
+            )
+
+            if result and not result.allowed:
+                # Send rate limit error
+                _send_error(
+                    self._ws,
+                    "rate_limit_error",
+                    "rate_limit_exceeded",
+                    "Rate limit exceeded. Please slow down.",
+                )
+                # Send updated rate limits
+                self._send_event(
+                    _rate_limits_payload(self._config.security.rate_limits, result)
+                )
+                return False
+
+            # Periodically send rate limit updates
+            if result and result.requests_remaining % 10 == 0:
+                self._send_event(
+                    _rate_limits_payload(self._config.security.rate_limits, result)
+                )
+
+            return True
+
+        except Exception as exc:
+            logger.warning("Rate limit check failed, allowing request", exc_info=exc)
+            return True
 
     # Event handlers -----------------------------------------------------------------
 

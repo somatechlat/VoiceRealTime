@@ -1,11 +1,11 @@
 version: "3.9"
 
 services:
-  voice-engine-api:
+  agentvoicebox-engine:
     build:
       context: ..
-      dockerfile: enterprise/Dockerfile
-    image: ovos/voice-engine-api:latest
+      dockerfile: AgentVoiceBoxEngine/Dockerfile
+    image: agentvoicebox/engine:latest
     env_file:
       - ./settings.docker.env
     environment:
@@ -13,10 +13,13 @@ services:
       DATABASE__URI: postgresql+psycopg://voice_agent:voice_agent@db:5432/voice_agent
       KAFKA__BOOTSTRAP_SERVERS: kafka:9092
       OPA__URL: http://opa:8181
+      REDIS__URL: redis://redis:6379/0
     depends_on:
       db:
         condition: service_healthy
       kafka:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       opa:
         condition: service_started
@@ -30,7 +33,7 @@ services:
       retries: 5
       start_period: 30s
     volumes:
-      - voice-engine-data:/app/data
+      - agentvoicebox-data:/app/data
       - ./policies:/app/policies:ro
     networks:
       - voice-engine
@@ -104,6 +107,25 @@ services:
     networks:
       - voice-engine
 
+  redis:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 2gb
+      --maxmemory-policy volatile-lru
+      --save 60 1
+      --loglevel warning
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - voice-engine
+
   prometheus:
     image: prom/prometheus:v2.52.0
     command:
@@ -113,14 +135,15 @@ services:
     # Host port mapping removed – Prometheus is only needed for internal scraping
     # ports: []
     depends_on:
-      - voice-engine-api
+      - agentvoicebox-engine
     networks:
       - voice-engine
 
 volumes:
   pgdata:
   kafka-data:
-  voice-engine-data:
+  redis-data:
+  agentvoicebox-data:
 
 networks:
   voice-engine:

@@ -9,6 +9,17 @@ from pydantic.config import ConfigDict
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+class RedisSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    url: str = Field("redis://localhost:6379/0", description="Redis connection URL")
+    max_connections: int = Field(50, description="Maximum connections in pool")
+    socket_timeout: float = Field(5.0, description="Socket timeout in seconds")
+    socket_connect_timeout: float = Field(5.0, description="Connection timeout in seconds")
+    retry_on_timeout: bool = Field(True, description="Retry on timeout")
+    health_check_interval: int = Field(30, description="Health check interval in seconds")
+
+
 class KafkaSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -83,6 +94,7 @@ class AppConfig(BaseSettings):
         ..., alias="APP_SECRET_KEY", description="Secret key used for Flask session signing"
     )
 
+    redis: RedisSettings = RedisSettings()
     kafka: KafkaSettings
     database: DatabaseSettings
     opa: OPASettings
@@ -104,6 +116,7 @@ def configure_app_from_env() -> AppConfig:
 
 __all__ = [
     "AppConfig",
+    "RedisSettings",
     "KafkaSettings",
     "DatabaseSettings",
     "OPASettings",
