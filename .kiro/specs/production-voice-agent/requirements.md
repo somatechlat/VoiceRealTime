@@ -2,226 +2,495 @@
 
 ## Introduction
 
-This document specifies the requirements for transforming the OVOS Voice Agent from a working prototype (handling ~100 concurrent connections) into a production-grade, globally distributed speech-to-speech platform capable of handling **millions of concurrent connections** with sub-200ms latency. The system must maintain 100% OpenAI Realtime API compatibility while leveraging battle-tested open-source infrastructure.
+This document specifies the complete requirements for **OVOS Voice Agent SaaS Platform** - a production-grade, multi-tenant Speech-to-Speech platform delivered as a service. The platform provides OpenAI Realtime API-compatible voice processing capabilities to thousands of tenants, handling **millions of concurrent connections** with enterprise-grade security, isolation, and observability.
+
+The system is designed as a **true SaaS offering** with:
+- Multi-tenant architecture with complete data isolation
+- Self-service tenant onboarding and API key management
+- Usage-based metering and billing integration
+- White-label capabilities for enterprise customers
+- Compliance-ready infrastructure (SOC2, GDPR, HIPAA-ready)
 
 ## Glossary
 
-- **Gateway**: Stateless WebSocket termination layer that handles protocol translation and routing
-- **Worker**: Specialized microservice that performs CPU/GPU-intensive tasks (STT, TTS, LLM inference)
-- **Session**: A single client connection with associated state (conversation history, audio buffers, config)
-- **Turn**: A complete user utterance from speech start to speech end
-- **Barge-in**: User interruption during assistant audio playback
-- **VAD**: Voice Activity Detection - algorithm to detect speech presence in audio
-- **STT**: Speech-to-Text transcription service
-- **TTS**: Text-to-Speech synthesis service
-- **Backpressure**: Flow control mechanism to prevent overwhelming downstream services
-- **Circuit Breaker**: Pattern to prevent cascade failures when dependencies are unhealthy
-- **CQRS**: Command Query Responsibility Segregation - separate read/write paths for scalability
+- **Tenant**: A paying customer organization with isolated resources, API keys, and usage quotas
+- **Project**: A logical grouping within a tenant (e.g., production, staging, dev environments)
+- **API Key**: Authentication credential scoped to a project with configurable permissions
+- **Session**: A single WebSocket connection representing one voice conversation
+- **Gateway**: Stateless WebSocket termination service that routes requests to workers
+- **Worker**: Specialized microservice for CPU/GPU-intensive tasks (STT, TTS, LLM)
+- **Control Plane**: Management APIs for tenant/project/key administration
+- **Data Plane**: Real-time voice processing APIs (WebSocket, REST)
+- **Metering**: Usage tracking for billing (connections, audio minutes, tokens)
+- **Quota**: Configurable limits per tenant/project (connections, requests, tokens)
+- **Circuit Breaker**: Fault tolerance pattern preventing cascade failures
+- **Backpressure**: Flow control preventing system overload
+- **PII**: Personally Identifiable Information requiring special handling
+- **Vault**: HashiCorp Vault - secrets management system
+- **NATS**: High-performance messaging system for distributed communication
 
 ---
 
 ## Requirements
 
-### Requirement 1: Horizontal Gateway Scaling
+---
 
-**User Story:** As a platform operator, I want to add gateway instances without downtime, so that I can handle traffic spikes by scaling horizontally.
+### Requirement 1: Multi-Tenant Architecture
 
-#### Acceptance Criteria
-
-1. WHEN a new gateway instance starts THEN the system SHALL register it with the load balancer within 10 seconds and begin accepting connections
-2. WHEN a gateway instance is terminated THEN the system SHALL drain existing connections gracefully over 30 seconds before shutdown
-3. WHILE multiple gateway instances are running THEN the system SHALL distribute new connections evenly using consistent hashing on session_id
-4. WHEN a client reconnects after gateway failure THEN the system SHALL restore session state from distributed storage within 500ms
-5. THE system SHALL maintain session affinity so that all messages for a session route to the same gateway instance when possible
-
-### Requirement 2: Distributed Session Management
-
-**User Story:** As a platform operator, I want session state stored in distributed storage, so that any gateway instance can serve any session.
+**User Story:** As a SaaS operator, I want complete tenant isolation, so that one tenant's data and traffic cannot affect another tenant.
 
 #### Acceptance Criteria
 
-1. WHEN a session is created THEN the system SHALL persist session metadata to Redis Cluster within 50ms
-2. WHEN session state is updated THEN the system SHALL propagate changes to all interested gateway instances via Redis Pub/Sub within 100ms
-3. WHILE a session is active THEN the system SHALL maintain a heartbeat in Redis with 30-second TTL to detect abandoned sessions
-4. WHEN a session heartbeat expires THEN the system SHALL clean up associated resources and emit session.closed event
-5. IF Redis Cluster becomes unavailable THEN the system SHALL continue serving existing in-memory sessions in degraded mode and reject new connections
-6. WHEN Redis Cluster recovers THEN the system SHALL resync in-memory state within 60 seconds
+1. WHEN a tenant is created THEN the system SHALL provision isolated namespaces for sessions, conversations, and audit logs
+2. WHILE processing requests THEN the system SHALL enforce tenant context on every operation using tenant_id extracted from API key
+3. WHEN querying data THEN the system SHALL apply tenant_id filter at the database layer preventing cross-tenant data access
+4. IF a request lacks valid tenant context THEN the system SHALL reject it with authentication_error before any processing
+5. WHEN a tenant exceeds resource quotas THEN the system SHALL throttle only that tenant without affecting others
+6. THE system SHALL support logical isolation (shared infrastructure) and physical isolation (dedicated resources) per tenant tier
+7. WHEN audit logs are written THEN the system SHALL tag every entry with tenant_id for compliance reporting
 
-### Requirement 3: Distributed Rate Limiting
+---
 
-**User Story:** As a platform operator, I want rate limits enforced globally across all gateway instances, so that no single client can overwhelm the system.
+### Requirement 2: Tenant Management (Control Plane)
 
-#### Acceptance Criteria
-
-1. WHEN a client exceeds 100 requests per minute THEN the system SHALL reject subsequent requests with rate_limit_error until the window resets
-2. WHEN a client exceeds 100,000 tokens per minute THEN the system SHALL reject subsequent requests with rate_limit_error
-3. WHILE rate limiting THEN the system SHALL use Redis-based sliding window algorithm for accurate cross-instance enforcement
-4. WHEN rate limit state is checked THEN the system SHALL complete the check within 5ms using Redis Lua scripts
-5. THE system SHALL support per-tenant rate limit overrides stored in configuration
-
-### Requirement 4: Audio Processing Pipeline
-
-**User Story:** As a user, I want my speech processed with minimal latency, so that conversations feel natural and responsive.
+**User Story:** As a SaaS operator, I want a control plane API to manage tenants, projects, and API keys, so that I can onboard customers and manage their access.
 
 #### Acceptance Criteria
 
-1. WHEN audio chunks arrive at the gateway THEN the system SHALL forward them to STT workers via Redis Streams within 10ms
-2. WHEN STT workers receive audio THEN the system SHALL begin transcription within 50ms of receiving the first chunk
-3. WHEN transcription completes THEN the system SHALL deliver results to the gateway within 100ms via Redis Pub/Sub
-4. WHEN TTS synthesis is requested THEN the system SHALL begin streaming audio chunks within 200ms (time-to-first-byte)
-5. WHILE audio is streaming THEN the system SHALL maintain consistent 20ms chunk intervals for smooth playback
-6. IF a worker becomes unhealthy THEN the system SHALL route work to healthy workers within 100ms
+1. WHEN a new tenant is onboarded THEN the system SHALL create tenant record with unique tenant_id, billing_id, and tier assignment
+2. WHEN a project is created THEN the system SHALL associate it with exactly one tenant and generate project_id
+3. WHEN an API key is generated THEN the system SHALL hash it using Argon2id before storage and return plaintext only once
+4. THE system SHALL support API key scopes: `realtime:connect`, `realtime:admin`, `billing:read`, `tenant:admin`
+5. WHEN an API key is rotated THEN the system SHALL allow grace period (configurable, default 24 hours) where both old and new keys work
+6. WHEN a tenant is suspended THEN the system SHALL immediately reject all new connections and gracefully close existing sessions within 60 seconds
+7. THE system SHALL expose REST API at `/v1/admin/tenants`, `/v1/admin/projects`, `/v1/admin/keys` with OpenAPI documentation
 
-### Requirement 5: STT Worker Pool
+---
 
-**User Story:** As a platform operator, I want dedicated STT workers that can scale independently, so that transcription capacity matches demand.
+### Requirement 3: API Key Authentication
 
-#### Acceptance Criteria
-
-1. WHEN an STT worker starts THEN the system SHALL register with the worker pool and begin consuming from Redis Streams
-2. WHILE processing audio THEN the STT worker SHALL use Faster-Whisper with CUDA acceleration when available
-3. WHEN transcription completes THEN the STT worker SHALL publish results to Redis Pub/Sub with session_id routing key
-4. THE STT worker SHALL support batch processing of up to 10 concurrent transcriptions per GPU
-5. WHEN worker load exceeds 80% THEN the system SHALL signal for horizontal scaling via metrics
-6. IF transcription fails THEN the STT worker SHALL retry once and then emit transcription.failed event
-
-### Requirement 6: TTS Worker Pool
-
-**User Story:** As a platform operator, I want dedicated TTS workers that stream audio efficiently, so that response latency is minimized.
+**User Story:** As a developer, I want to authenticate using API keys, so that I can integrate the voice API into my application.
 
 #### Acceptance Criteria
 
-1. WHEN a TTS worker starts THEN the system SHALL load Kokoro ONNX model and register with the worker pool
-2. WHEN synthesis is requested THEN the TTS worker SHALL stream audio chunks as they are generated (not wait for completion)
-3. WHILE streaming THEN the TTS worker SHALL publish chunks to Redis Streams with ordering guarantees
-4. THE TTS worker SHALL support voice selection and speed adjustment per request
-5. WHEN a cancel signal is received THEN the TTS worker SHALL stop synthesis within 50ms
-6. IF Kokoro is unavailable THEN the TTS worker SHALL fall back to Piper TTS with degraded quality notification
+1. WHEN a WebSocket connection is initiated THEN the system SHALL require Bearer token in Authorization header or `access_token` query parameter
+2. WHEN validating API key THEN the system SHALL verify against hashed keys in Redis cache (hot) with PostgreSQL fallback (cold)
+3. IF API key is invalid or expired THEN the system SHALL reject connection with `authentication_error` within 50ms
+4. WHEN API key is validated THEN the system SHALL extract tenant_id, project_id, scopes, and rate_limit_tier
+5. THE system SHALL support ephemeral session tokens (short-lived, single-use) for browser clients generated via REST endpoint
+6. WHEN generating ephemeral token THEN the system SHALL bind it to specific session_id and expire within 10 minutes
+7. THE system SHALL log all authentication attempts (success/failure) with source IP, key_id (not full key), and timestamp
 
-### Requirement 7: LLM Integration
+---
 
-**User Story:** As a user, I want intelligent responses generated quickly, so that conversations are helpful and responsive.
+### Requirement 4: Secrets Management
 
-#### Acceptance Criteria
-
-1. WHEN generating a response THEN the system SHALL call the configured LLM API with conversation context
-2. WHILE waiting for LLM response THEN the system SHALL enforce a 30-second timeout
-3. WHEN LLM response arrives THEN the system SHALL stream tokens to TTS immediately (not wait for completion)
-4. IF the primary LLM is unavailable THEN the system SHALL fail over to backup LLM within 5 seconds
-5. THE system SHALL support multiple LLM providers (OpenAI, Groq, Ollama) via configuration
-6. WHEN function calling is detected THEN the system SHALL execute the function and include results in context
-
-### Requirement 8: Connection Management
-
-**User Story:** As a platform operator, I want efficient connection handling, so that the system can maintain millions of concurrent WebSocket connections.
+**User Story:** As a SaaS operator, I want secrets managed securely, so that API keys, database credentials, and encryption keys are never exposed.
 
 #### Acceptance Criteria
 
-1. THE gateway SHALL handle 50,000 concurrent WebSocket connections per instance using async I/O
-2. WHEN a connection is idle for 5 minutes THEN the system SHALL send a ping frame to verify liveness
-3. WHEN a connection fails ping/pong THEN the system SHALL close the connection and clean up resources
-4. WHILE accepting connections THEN the system SHALL enforce a maximum of 100 new connections per second per instance to prevent thundering herd
-5. THE system SHALL use connection pooling for all downstream services (Redis, Postgres, HTTP)
+1. THE system SHALL use HashiCorp Vault for all secret storage and retrieval in production
+2. WHEN a service starts THEN the system SHALL authenticate to Vault using Kubernetes service account (k8s auth method)
+3. THE system SHALL store database credentials, API keys for external services, and encryption keys in Vault
+4. WHEN secrets are rotated in Vault THEN the system SHALL detect changes within 60 seconds and reload without restart
+5. THE system SHALL encrypt sensitive fields in database (conversation transcripts, PII) using keys from Vault
+6. IF Vault is unavailable THEN the system SHALL use cached credentials for up to 1 hour and alert operators
+7. THE system SHALL never log secrets; all secret values SHALL be redacted in logs and error messages
 
-### Requirement 9: Observability
+---
 
-**User Story:** As a platform operator, I want comprehensive metrics and logging, so that I can monitor system health and debug issues.
+### Requirement 5: Usage Metering & Billing
 
-#### Acceptance Criteria
-
-1. THE system SHALL expose Prometheus metrics at /metrics endpoint on each service
-2. THE system SHALL track latency histograms for: WebSocket message processing, STT transcription, TTS synthesis, LLM generation
-3. THE system SHALL track gauges for: active connections, queue depths, worker utilization
-4. WHEN an error occurs THEN the system SHALL log structured JSON with correlation_id, session_id, and error details
-5. THE system SHALL support distributed tracing via OpenTelemetry when enabled
-6. WHEN latency exceeds SLO thresholds THEN the system SHALL emit alerts via configured channels
-
-### Requirement 10: Data Persistence
-
-**User Story:** As a platform operator, I want conversation data persisted reliably, so that I can support audit requirements and conversation continuity.
+**User Story:** As a SaaS operator, I want accurate usage metering, so that I can bill tenants based on consumption.
 
 #### Acceptance Criteria
 
-1. WHEN a conversation item is created THEN the system SHALL persist it to PostgreSQL within 1 second
-2. THE system SHALL use async writes with write-ahead buffering to avoid blocking the hot path
-3. WHEN querying conversation history THEN the system SHALL return results within 100ms for the last 100 items
-4. THE system SHALL partition conversation data by tenant_id for query isolation
-5. THE system SHALL retain conversation data for 90 days by default with configurable retention
+1. THE system SHALL meter the following dimensions: connection_minutes, audio_input_seconds, audio_output_seconds, llm_input_tokens, llm_output_tokens, api_requests
+2. WHEN a metered event occurs THEN the system SHALL write to metering pipeline within 100ms (async, non-blocking)
+3. THE system SHALL aggregate usage per tenant/project at 1-minute granularity and store in TimescaleDB
+4. WHEN usage is queried THEN the system SHALL return accurate totals within 5-minute lag for real-time dashboards
+5. THE system SHALL export usage to billing system (Stripe, custom) via webhook or batch export daily
+6. WHEN a tenant approaches quota (80%) THEN the system SHALL emit warning event to notification system
+7. THE system SHALL support usage-based pricing tiers: Free (limited), Pro (metered), Enterprise (committed)
 
-### Requirement 11: Security
+---
 
-**User Story:** As a platform operator, I want secure authentication and authorization, so that only authorized clients can access the system.
+### Requirement 6: Rate Limiting & Quotas
+
+**User Story:** As a SaaS operator, I want configurable rate limits and quotas, so that I can protect the platform and enforce fair usage.
 
 #### Acceptance Criteria
 
-1. WHEN a WebSocket connection is initiated THEN the system SHALL validate the bearer token before accepting
-2. THE system SHALL support ephemeral client secrets with configurable TTL (default 10 minutes)
-3. WHEN a token expires THEN the system SHALL reject the connection with authentication_error
-4. THE system SHALL encrypt all data in transit using TLS 1.3
-5. THE system SHALL support tenant isolation so that one tenant cannot access another's sessions
-6. WHEN sensitive data is logged THEN the system SHALL redact PII fields
+1. THE system SHALL enforce rate limits at three levels: global (platform protection), tenant (fair usage), project (granular control)
+2. WHEN rate limit is exceeded THEN the system SHALL return `rate_limit_error` with `retry_after` header indicating reset time
+3. THE system SHALL use Redis-based sliding window algorithm with Lua scripts for atomic operations (<5ms latency)
+4. THE system SHALL support configurable limits: requests_per_minute, tokens_per_minute, concurrent_connections, audio_minutes_per_day
+5. WHEN a tenant upgrades tier THEN the system SHALL apply new limits within 60 seconds without connection disruption
+6. THE system SHALL emit `rate_limits.updated` event to connected clients when limits change
+7. IF Redis is unavailable THEN the system SHALL fail-open with local rate limiting and alert operators
 
-### Requirement 12: Fault Tolerance
+---
+
+### Requirement 7: Gateway Service (Data Plane Entry)
+
+**User Story:** As a platform operator, I want stateless gateway instances, so that I can scale horizontally to handle millions of connections.
+
+#### Acceptance Criteria
+
+1. THE gateway SHALL handle 50,000 concurrent WebSocket connections per instance using async I/O (uvicorn + uvloop)
+2. WHEN a connection is accepted THEN the gateway SHALL authenticate, extract tenant context, and register session in Redis within 100ms
+3. WHILE processing messages THEN the gateway SHALL route audio to workers via NATS JetStream and await responses via NATS subscription
+4. WHEN a gateway instance is terminated THEN the system SHALL drain connections gracefully over 30 seconds (SIGTERM handling)
+5. THE gateway SHALL maintain session affinity using consistent hashing on session_id for optimal cache utilization
+6. WHEN a client reconnects THEN the gateway SHALL restore session state from Redis within 500ms
+7. THE gateway SHALL expose health endpoints: `/health` (liveness), `/ready` (readiness including dependency checks)
+
+---
+
+### Requirement 8: Message Bus (NATS JetStream)
+
+**User Story:** As a platform architect, I want reliable message delivery between services, so that audio processing is consistent and fault-tolerant.
+
+#### Acceptance Criteria
+
+1. THE system SHALL use NATS JetStream for all inter-service communication with at-least-once delivery guarantees
+2. THE system SHALL define streams: `VOICE.audio.inbound`, `VOICE.audio.transcribed`, `VOICE.tts.requests`, `VOICE.tts.chunks`, `VOICE.events`
+3. WHEN publishing messages THEN the system SHALL include tenant_id, session_id, timestamp, and correlation_id headers
+4. THE system SHALL use consumer groups for worker pools enabling horizontal scaling and automatic rebalancing
+5. WHEN a message fails processing THEN the system SHALL retry 3 times with exponential backoff before dead-lettering
+6. THE system SHALL retain messages for 24 hours enabling replay for debugging and recovery
+7. WHEN NATS cluster loses quorum THEN the system SHALL queue messages locally (up to 1000) and retry connection
+
+---
+
+### Requirement 9: Session State Management (Redis Cluster)
+
+**User Story:** As a platform operator, I want distributed session state, so that any gateway can serve any session.
+
+#### Acceptance Criteria
+
+1. THE system SHALL use Redis Cluster (6+ nodes) for session state with automatic sharding by session_id
+2. WHEN a session is created THEN the system SHALL store: session_id, tenant_id, project_id, config, created_at, last_activity with 1-hour TTL
+3. WHILE a session is active THEN the system SHALL update last_activity heartbeat every 30 seconds extending TTL
+4. WHEN session state is updated THEN the system SHALL publish to Redis Pub/Sub channel `session:{session_id}` for real-time sync
+5. THE system SHALL store conversation items in Redis List with automatic trimming to last 100 items (overflow to PostgreSQL)
+6. WHEN Redis Cluster fails over THEN the system SHALL reconnect within 5 seconds using Sentinel/Cluster topology refresh
+7. THE system SHALL use Redis Streams for audio chunk buffering with consumer groups for worker distribution
+
+---
+
+### Requirement 10: STT Worker Service
+
+**User Story:** As a platform operator, I want dedicated STT workers, so that transcription scales independently of gateway capacity.
+
+#### Acceptance Criteria
+
+1. THE STT worker SHALL consume from NATS stream `VOICE.audio.inbound` using durable consumer group `stt-workers`
+2. WHEN audio is received THEN the STT worker SHALL transcribe using Faster-Whisper with CUDA acceleration (if available)
+3. THE STT worker SHALL support batch processing: up to 8 concurrent transcriptions per GPU, 4 per CPU-only instance
+4. WHEN transcription completes THEN the STT worker SHALL publish to `VOICE.audio.transcribed` with session_id routing
+5. THE STT worker SHALL emit metrics: transcription_latency_ms, transcription_success_total, transcription_error_total, gpu_utilization
+6. WHEN worker load exceeds 80% THEN the system SHALL signal HPA for horizontal scaling via Prometheus metrics
+7. IF transcription fails after 3 retries THEN the STT worker SHALL publish `transcription.failed` event and dead-letter the message
+
+---
+
+### Requirement 11: TTS Worker Service
+
+**User Story:** As a platform operator, I want dedicated TTS workers, so that speech synthesis scales independently and streams efficiently.
+
+#### Acceptance Criteria
+
+1. THE TTS worker SHALL consume from NATS stream `VOICE.tts.requests` using durable consumer group `tts-workers`
+2. WHEN synthesis is requested THEN the TTS worker SHALL load Kokoro ONNX model and stream audio chunks as generated
+3. THE TTS worker SHALL publish audio chunks to `VOICE.tts.chunks` with sequence numbers for ordered reassembly
+4. THE TTS worker SHALL support voice selection from available Kokoro voices and speed adjustment (0.5x - 2.0x)
+5. WHEN cancel signal is received THEN the TTS worker SHALL stop synthesis within 50ms and publish `tts.cancelled` event
+6. THE TTS worker SHALL cache loaded models in memory and share across requests (model pool pattern)
+7. IF Kokoro is unavailable THEN the TTS worker SHALL fall back to Piper TTS and emit `tts.degraded` event
+
+---
+
+### Requirement 12: LLM Integration Service
+
+**User Story:** As a platform operator, I want flexible LLM integration, so that I can use multiple providers and handle failures gracefully.
+
+#### Acceptance Criteria
+
+1. THE system SHALL support LLM providers: OpenAI, Groq, Anthropic, Ollama (self-hosted) via unified interface
+2. WHEN generating response THEN the system SHALL use tenant-configured provider or fall back to platform default
+3. THE system SHALL stream LLM tokens to TTS immediately (not wait for completion) for minimum latency
+4. WHEN primary LLM provider fails THEN the system SHALL failover to backup provider within 5 seconds
+5. THE system SHALL enforce per-tenant LLM quotas (tokens/day) and reject requests when exceeded
+6. WHEN function calling is detected THEN the system SHALL execute registered functions and include results in context
+7. THE system SHALL support tenant-provided API keys (BYOK - Bring Your Own Key) stored encrypted in Vault
+
+---
+
+### Requirement 13: Database Layer (PostgreSQL)
+
+**User Story:** As a platform operator, I want reliable data persistence, so that conversation history and audit logs are durable.
+
+#### Acceptance Criteria
+
+1. THE system SHALL use PostgreSQL 16+ with logical replication for read replicas
+2. THE system SHALL partition tables by tenant_id using PostgreSQL native partitioning for query isolation
+3. WHEN conversation items overflow Redis THEN the system SHALL persist to PostgreSQL asynchronously within 5 seconds
+4. THE system SHALL store: tenants, projects, api_keys, sessions, conversation_items, audit_logs, usage_metrics
+5. WHEN querying conversation history THEN the system SHALL return last 100 items within 100ms using covering indexes
+6. THE system SHALL retain data per tenant configuration: 30/90/365 days with automated partition pruning
+7. THE system SHALL encrypt PII columns (transcripts, user content) using AES-256-GCM with keys from Vault
+
+---
+
+### Requirement 14: Observability Stack
+
+**User Story:** As a platform operator, I want comprehensive observability, so that I can monitor health, debug issues, and meet SLAs.
+
+#### Acceptance Criteria
+
+1. THE system SHALL expose Prometheus metrics at `/metrics` on every service with standard naming convention
+2. THE system SHALL track latency histograms (p50, p95, p99) for: websocket_message_processing, stt_transcription, tts_synthesis, llm_generation
+3. THE system SHALL track gauges for: active_connections (by tenant), queue_depth, worker_utilization, error_rate
+4. THE system SHALL use structured JSON logging with fields: timestamp, level, service, tenant_id, session_id, correlation_id, message
+5. THE system SHALL support distributed tracing via OpenTelemetry with Jaeger backend
+6. WHEN SLO threshold is breached THEN the system SHALL emit alerts via PagerDuty/Slack/webhook within 60 seconds
+7. THE system SHALL provide Grafana dashboards for: platform overview, per-tenant usage, worker health, error analysis
+
+---
+
+### Requirement 15: Security & Compliance
+
+**User Story:** As a SaaS operator, I want enterprise-grade security, so that I can serve regulated industries and pass audits.
+
+#### Acceptance Criteria
+
+1. THE system SHALL encrypt all data in transit using TLS 1.3 with modern cipher suites
+2. THE system SHALL encrypt all data at rest using AES-256 (database, object storage, backups)
+3. WHEN PII is logged THEN the system SHALL redact or hash sensitive fields (transcripts, user identifiers)
+4. THE system SHALL support tenant data residency requirements (EU, US, APAC) via regional deployments
+5. THE system SHALL maintain audit logs for all administrative actions with 7-year retention
+6. THE system SHALL support SSO integration (SAML 2.0, OIDC) for enterprise tenant authentication
+7. THE system SHALL pass security scanning (SAST, DAST, dependency scanning) in CI/CD pipeline
+
+---
+
+### Requirement 16: Fault Tolerance & Disaster Recovery
 
 **User Story:** As a platform operator, I want the system to handle failures gracefully, so that partial outages don't cause complete service disruption.
 
 #### Acceptance Criteria
 
-1. WHEN a Redis node fails THEN the system SHALL failover to replica within 5 seconds using Redis Sentinel/Cluster
-2. WHEN a worker crashes THEN the system SHALL reassign pending work to healthy workers within 10 seconds
-3. WHEN a downstream service is unhealthy THEN the system SHALL open circuit breaker after 5 consecutive failures
-4. WHILE circuit breaker is open THEN the system SHALL return degraded responses and retry every 30 seconds
-5. WHEN circuit breaker closes THEN the system SHALL resume normal operation and log recovery event
-6. THE system SHALL support graceful degradation: audio-only mode if LLM fails, text-only mode if TTS fails
+1. WHEN a Redis node fails THEN the system SHALL failover to replica within 5 seconds using Redis Cluster automatic failover
+2. WHEN a NATS node fails THEN the system SHALL reconnect to healthy nodes within 3 seconds using cluster-aware client
+3. WHEN a worker crashes THEN the system SHALL reassign pending work via NATS consumer rebalancing within 10 seconds
+4. THE system SHALL implement circuit breakers for all external dependencies (LLM APIs, Vault, external services)
+5. WHILE circuit breaker is open THEN the system SHALL return degraded responses and retry every 30 seconds
+6. THE system SHALL support multi-region active-passive deployment with RPO < 1 minute, RTO < 5 minutes
+7. THE system SHALL perform automated backups: PostgreSQL (hourly), Redis (hourly snapshots), Vault (daily)
+
+---
+
+### Requirement 17: Deployment & Infrastructure
+
+**User Story:** As a platform operator, I want automated deployment, so that I can release updates safely and scale on demand.
+
+#### Acceptance Criteria
+
+1. THE system SHALL deploy on Kubernetes using Helm charts with configurable values per environment
+2. THE system SHALL use Horizontal Pod Autoscaler (HPA) based on CPU, memory, and custom metrics (connections, queue depth)
+3. THE system SHALL support rolling deployments with zero-downtime using readiness probes and PodDisruptionBudgets
+4. THE system SHALL use GitOps (ArgoCD/Flux) for declarative infrastructure management
+5. THE system SHALL run in containerized form with multi-stage Dockerfile optimized for size and security
+6. THE system SHALL support local development using Docker Compose with all dependencies
+7. THE system SHALL define infrastructure as code using Terraform for cloud resources (managed databases, load balancers)
+
+---
+
+### Requirement 18: Developer Experience
+
+**User Story:** As a developer integrating the API, I want excellent documentation and SDKs, so that I can build quickly and correctly.
+
+#### Acceptance Criteria
+
+1. THE system SHALL provide OpenAPI 3.1 specification for all REST endpoints with examples
+2. THE system SHALL provide AsyncAPI specification for WebSocket protocol with all events documented
+3. THE system SHALL provide SDKs for: Python, JavaScript/TypeScript, Go with idiomatic patterns
+4. THE system SHALL provide interactive API explorer (Swagger UI) at `/docs` endpoint
+5. THE system SHALL provide webhook endpoint for receiving events (session.created, transcription.completed, etc.)
+6. THE system SHALL provide sample applications demonstrating common integration patterns
+7. THE system SHALL provide status page showing real-time platform health and incident history
 
 ---
 
 ## Infrastructure Components
 
-### Required Open-Source Infrastructure
+### Production Stack (Open Source)
 
-| Component | Technology | Purpose | Why This Choice |
-|-----------|------------|---------|-----------------|
-| Load Balancer | HAProxy 2.8+ | WebSocket routing, health checks | Battle-tested, WebSocket-native, 1M+ conn/instance |
-| Session Store | Redis Cluster 7+ | Distributed state, pub/sub, streams | Sub-ms latency, proven at Twitter/Discord scale |
-| Message Queue | Redis Streams | Audio chunk routing, work distribution | Simpler than Kafka, sufficient for 1M msg/sec |
-| Database | PostgreSQL 16+ | Conversation persistence, audit logs | JSONB for flexible schema, partitioning support |
-| Metrics | Prometheus + Grafana | Observability stack | Industry standard, extensive ecosystem |
-| Tracing | Jaeger | Distributed tracing | OpenTelemetry compatible, low overhead |
-| Container Orchestration | Kubernetes | Auto-scaling, deployment | Required for 1M+ connections across regions |
+| Layer | Component | Technology | Why This Choice |
+|-------|-----------|------------|-----------------|
+| **Load Balancer** | L4/L7 LB | HAProxy 2.9 | WebSocket-native, 2M+ conn/instance, battle-tested |
+| **API Gateway** | Rate limiting, Auth | Kong / Envoy | Plugin ecosystem, observability, proven at scale |
+| **Message Bus** | Async messaging | NATS JetStream | 10M+ msg/sec, simpler than Kafka, built-in persistence |
+| **Session Store** | Distributed state | Redis Cluster 7.2 | Sub-ms latency, Pub/Sub, Streams, proven at scale |
+| **Primary Database** | Relational data | PostgreSQL 16 | JSONB, partitioning, logical replication |
+| **Time-Series DB** | Metrics/Metering | TimescaleDB | PostgreSQL-compatible, compression, retention policies |
+| **Secrets** | Secret management | HashiCorp Vault | Dynamic secrets, encryption as service, audit logging |
+| **Observability** | Metrics | Prometheus + Thanos | Federation, long-term storage, proven ecosystem |
+| **Observability** | Logging | Loki + Grafana | Log aggregation, label-based queries, cost-effective |
+| **Observability** | Tracing | Jaeger | OpenTelemetry native, distributed tracing |
+| **Orchestration** | Container platform | Kubernetes | Auto-scaling, self-healing, declarative |
+| **GitOps** | Deployment | ArgoCD | Declarative, audit trail, rollback |
+| **CI/CD** | Pipeline | GitHub Actions | Native integration, marketplace actions |
+| **IaC** | Infrastructure | Terraform | Multi-cloud, state management, modules |
 
 ### Why NOT These Technologies
 
 | Technology | Reason to Skip |
 |------------|----------------|
-| Kafka | Overkill for <1M msg/sec, adds operational complexity. Redis Streams sufficient. |
-| Milvus | Vector DB not needed unless doing semantic search/RAG. Not in current requirements. |
-| MongoDB | PostgreSQL JSONB provides same flexibility with better consistency guarantees. |
-| RabbitMQ | Redis Streams provides same functionality with fewer moving parts. |
-| Consul | Kubernetes provides service discovery natively. |
+| **Kafka** | Overkill for <10M msg/sec. NATS JetStream provides persistence with simpler operations. |
+| **MongoDB** | PostgreSQL JSONB provides flexibility with ACID guarantees. No need for separate document store. |
+| **Consul** | Kubernetes provides service discovery. Vault handles secrets. No need for separate tool. |
+| **RabbitMQ** | NATS is faster, simpler, and handles our patterns (pub/sub, queues, streams) in one system. |
+| **Elasticsearch** | Loki is sufficient for logs. PostgreSQL full-text search handles application search. |
+| **Milvus** | Vector DB not needed unless adding semantic search/RAG. Not in current requirements. |
 
 ---
 
 ## Capacity Planning
 
-### Target Scale
+### Target Scale (Year 1)
 
 | Metric | Target | Infrastructure Required |
 |--------|--------|------------------------|
+| Tenants | 10,000 | Control plane: 3 instances |
 | Concurrent Connections | 1,000,000 | 20 gateway instances (50K each) |
-| Messages/Second | 500,000 | Redis Cluster 6 nodes |
-| STT Requests/Second | 10,000 | 50 STT workers (4 GPU each) |
-| TTS Requests/Second | 10,000 | 50 TTS workers (4 GPU each) |
-| Storage (90 days) | 10 TB | PostgreSQL with partitioning |
+| Peak Messages/Second | 500,000 | NATS cluster: 3 nodes |
+| STT Requests/Second | 10,000 | 50 STT workers (GPU) |
+| TTS Requests/Second | 10,000 | 50 TTS workers (GPU) |
+| LLM Requests/Second | 5,000 | External APIs + 10 Ollama instances |
+| Storage (1 year) | 50 TB | PostgreSQL cluster + object storage |
 
 ### Resource Estimates Per Component
 
-| Component | CPU | Memory | GPU | Instances |
-|-----------|-----|--------|-----|-----------|
-| Gateway | 4 cores | 8 GB | - | 20 |
-| STT Worker | 4 cores | 16 GB | 1x T4/A10 | 50 |
-| TTS Worker | 4 cores | 16 GB | 1x T4/A10 | 50 |
-| Redis Cluster | 8 cores | 64 GB | - | 6 |
-| PostgreSQL | 16 cores | 128 GB | - | 3 (primary + 2 replicas) |
-| HAProxy | 8 cores | 16 GB | - | 3 |
+| Component | CPU | Memory | GPU | Storage | Instances |
+|-----------|-----|--------|-----|---------|-----------|
+| Gateway | 4 cores | 8 GB | - | - | 20 |
+| STT Worker | 4 cores | 16 GB | 1x T4 | - | 50 |
+| TTS Worker | 4 cores | 16 GB | 1x T4 | 10 GB (models) | 50 |
+| LLM Worker (Ollama) | 8 cores | 32 GB | 1x A10 | 50 GB (models) | 10 |
+| Control Plane | 2 cores | 4 GB | - | - | 3 |
+| Redis Cluster | 8 cores | 64 GB | - | 100 GB | 6 |
+| PostgreSQL | 16 cores | 128 GB | - | 2 TB | 3 |
+| TimescaleDB | 8 cores | 64 GB | - | 1 TB | 3 |
+| NATS Cluster | 4 cores | 16 GB | - | 100 GB | 3 |
+| Vault | 2 cores | 4 GB | - | 10 GB | 3 |
+| HAProxy | 8 cores | 16 GB | - | - | 3 |
+
+---
+
+## Data Models (High-Level)
+
+### Core Entities
+
+```
+Tenant
+├── tenant_id (UUID)
+├── name
+├── tier (free/pro/enterprise)
+├── billing_id (Stripe customer ID)
+├── settings (JSONB)
+├── created_at
+└── status (active/suspended/deleted)
+
+Project
+├── project_id (UUID)
+├── tenant_id (FK)
+├── name
+├── environment (production/staging/development)
+├── settings (JSONB)
+└── created_at
+
+APIKey
+├── key_id (UUID)
+├── project_id (FK)
+├── key_hash (Argon2id)
+├── key_prefix (first 8 chars for identification)
+├── scopes (array)
+├── rate_limit_tier
+├── expires_at
+└── created_at
+
+Session
+├── session_id (UUID)
+├── project_id (FK)
+├── tenant_id (denormalized for partitioning)
+├── config (JSONB)
+├── status (active/closed)
+├── created_at
+├── closed_at
+└── metadata (JSONB)
+
+ConversationItem
+├── item_id (UUID)
+├── session_id (FK)
+├── tenant_id (partition key)
+├── role (user/assistant/system/function)
+├── content (JSONB, encrypted)
+├── created_at
+└── metadata (JSONB)
+
+UsageRecord
+├── record_id (UUID)
+├── tenant_id (FK)
+├── project_id (FK)
+├── dimension (connection_minutes/audio_seconds/tokens)
+├── quantity
+├── timestamp
+└── metadata (JSONB)
+```
+
+---
+
+## API Surface
+
+### Control Plane APIs (REST)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/admin/tenants` | POST | Create tenant |
+| `/v1/admin/tenants/{id}` | GET/PATCH/DELETE | Manage tenant |
+| `/v1/admin/projects` | POST | Create project |
+| `/v1/admin/projects/{id}` | GET/PATCH/DELETE | Manage project |
+| `/v1/admin/keys` | POST | Generate API key |
+| `/v1/admin/keys/{id}` | GET/DELETE | Manage API key |
+| `/v1/admin/keys/{id}/rotate` | POST | Rotate API key |
+| `/v1/admin/usage` | GET | Query usage metrics |
+
+### Data Plane APIs (REST + WebSocket)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/realtime` | WebSocket | Real-time voice session |
+| `/v1/realtime/sessions` | POST | Create session (get ephemeral token) |
+| `/v1/realtime/sessions/{id}` | GET/DELETE | Manage session |
+| `/v1/audio/transcriptions` | POST | One-shot STT |
+| `/v1/audio/speech` | POST | One-shot TTS |
+| `/v1/tts/voices` | GET | List available voices |
+| `/health` | GET | Health check |
+| `/ready` | GET | Readiness check |
+| `/metrics` | GET | Prometheus metrics |
+
+---
+
+## SLA Targets
+
+| Metric | Target | Measurement |
+|--------|--------|-------------|
+| Availability | 99.9% | Monthly uptime |
+| WebSocket Latency (p99) | < 50ms | Message round-trip |
+| STT Latency (p99) | < 500ms | Audio to transcript |
+| TTS Time-to-First-Byte (p99) | < 200ms | Request to first audio chunk |
+| API Latency (p99) | < 100ms | REST endpoints |
+| Error Rate | < 0.1% | 5xx responses |
 
