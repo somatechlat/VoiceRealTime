@@ -1104,3 +1104,419 @@ All requirements SHALL be traceable to:
 **Next Review Date:** 2025-12-15  
 **Document Owner:** AgentVoiceBox Architecture Team
 
+
+
+---
+
+## 13. File Handling Requirements
+
+### 13.1 Model File Management
+
+**AVB-FH-001:** THE AgentVoiceBox system SHALL store ML models (Kokoro, Whisper) on persistent volumes, NOT in container images.
+
+**AVB-FH-002:** THE AgentVoiceBox system SHALL verify model file integrity via SHA256 checksum at startup.
+
+**AVB-FH-003:** WHEN model checksum fails THEN AgentVoiceBox SHALL refuse to start and log error with expected vs actual checksum.
+
+**AVB-FH-004:** THE AgentVoiceBox system SHALL support model versioning with directory structure: `/models/{model_name}/{version}/`.
+
+**AVB-FH-005:** THE AgentVoiceBox system SHALL support hot-swapping model versions without service restart via configuration update.
+
+### 13.2 Voice File Management
+
+**AVB-FH-010:** THE AgentVoiceBox system SHALL store TTS voice files on persistent volumes at `/voices/{engine}/{voice_id}/`.
+
+**AVB-FH-011:** THE AgentVoiceBox system SHALL validate voice file format (WAV/BIN) at startup.
+
+**AVB-FH-012:** THE AgentVoiceBox system SHALL support dynamic voice catalog updates without restart.
+
+**AVB-FH-013:** WHEN voice file is missing THEN AgentVoiceBox SHALL fall back to default voice and log warning.
+
+### 13.3 Audio File Handling
+
+**AVB-FH-020:** THE AgentVoiceBox system SHALL NOT persist raw audio to disk during normal operation.
+
+**AVB-FH-021:** WHERE debug mode is enabled THEN AgentVoiceBox SHALL write audio to temporary files with automatic cleanup after 1 hour.
+
+**AVB-FH-022:** THE AgentVoiceBox system SHALL use memory-mapped I/O for large audio buffers to prevent memory exhaustion.
+
+**AVB-FH-023:** THE AgentVoiceBox system SHALL limit audio buffer size to 30 seconds (720KB at 24kHz PCM16) per session.
+
+### 13.4 Log File Management
+
+**AVB-FH-030:** THE AgentVoiceBox system SHALL write logs to stdout/stderr for container log collection.
+
+**AVB-FH-031:** WHERE file logging is enabled THEN AgentVoiceBox SHALL rotate logs at 100MB with 10 file retention.
+
+**AVB-FH-032:** THE AgentVoiceBox system SHALL compress rotated logs using gzip.
+
+**AVB-FH-033:** THE AgentVoiceBox system SHALL NOT log audio content or full transcripts to files.
+
+### 13.5 Temporary File Management
+
+**AVB-FH-040:** THE AgentVoiceBox system SHALL use `/tmp` or configured temp directory for temporary files.
+
+**AVB-FH-041:** THE AgentVoiceBox system SHALL clean up temporary files within 60 seconds of creation.
+
+**AVB-FH-042:** THE AgentVoiceBox system SHALL use secure random filenames for temporary files.
+
+**AVB-FH-043:** THE AgentVoiceBox system SHALL set restrictive permissions (0600) on temporary files.
+
+### 13.6 Certificate File Management
+
+**AVB-FH-050:** THE AgentVoiceBox system SHALL load TLS certificates from Kubernetes secrets or mounted volumes.
+
+**AVB-FH-051:** THE AgentVoiceBox system SHALL support certificate rotation without restart via inotify watch.
+
+**AVB-FH-052:** WHEN certificate expires within 7 days THEN AgentVoiceBox SHALL emit warning metric and log.
+
+**AVB-FH-053:** THE AgentVoiceBox system SHALL validate certificate chain at startup.
+
+---
+
+## 14. Compression Requirements
+
+### 14.1 WebSocket Compression
+
+**AVB-CMP-001:** THE AgentVoiceBox Gateway SHALL support WebSocket per-message deflate compression (RFC 7692).
+
+**AVB-CMP-002:** THE AgentVoiceBox Gateway SHALL negotiate compression during WebSocket handshake.
+
+**AVB-CMP-003:** WHERE client supports compression THEN AgentVoiceBox SHALL compress text messages (JSON events).
+
+**AVB-CMP-004:** THE AgentVoiceBox Gateway SHALL NOT compress binary audio messages (already compressed or PCM).
+
+**AVB-CMP-005:** THE AgentVoiceBox Gateway SHALL use compression level 6 (balanced speed/ratio).
+
+### 14.2 Audio Compression
+
+**AVB-CMP-010:** THE AgentVoiceBox system SHALL support audio formats with compression ratios:
+
+| Format | Sample Rate | Bit Depth | Compression | Use Case |
+|--------|-------------|-----------|-------------|----------|
+| PCM16 | 24kHz | 16-bit | None (1:1) | High quality |
+| G.711 μ-law | 8kHz | 8-bit | 2:1 | Telephony |
+| G.711 A-law | 8kHz | 8-bit | 2:1 | Telephony (EU) |
+| Opus | 24kHz | Variable | 10:1 | Low bandwidth |
+
+**AVB-CMP-011:** THE AgentVoiceBox system SHALL auto-select audio format based on client capability negotiation.
+
+**AVB-CMP-012:** WHERE bandwidth is constrained THEN AgentVoiceBox SHALL prefer Opus codec.
+
+**AVB-CMP-013:** THE AgentVoiceBox system SHALL support real-time audio transcoding between formats.
+
+### 14.3 Data Compression
+
+**AVB-CMP-020:** THE AgentVoiceBox system SHALL compress conversation history in Redis using LZ4.
+
+**AVB-CMP-021:** THE AgentVoiceBox system SHALL compress PostgreSQL JSONB columns using TOAST.
+
+**AVB-CMP-022:** THE AgentVoiceBox system SHALL compress backup files using zstd (level 3).
+
+**AVB-CMP-023:** THE AgentVoiceBox system SHALL compress log files using gzip after rotation.
+
+### 14.4 Network Compression
+
+**AVB-CMP-030:** THE AgentVoiceBox Load Balancer SHALL support HTTP/2 header compression (HPACK).
+
+**AVB-CMP-031:** THE AgentVoiceBox system SHALL enable TCP compression for internal Redis connections.
+
+**AVB-CMP-032:** THE AgentVoiceBox system SHALL use binary protocol (not JSON) for internal worker communication where possible.
+
+---
+
+## 15. Enhanced Security Requirements
+
+### 15.1 Network Security
+
+**AVB-SEC-001:** THE AgentVoiceBox system SHALL enforce TLS 1.3 for all external connections.
+
+**AVB-SEC-002:** THE AgentVoiceBox system SHALL disable TLS 1.0, 1.1, and 1.2 for external endpoints.
+
+**AVB-SEC-003:** THE AgentVoiceBox system SHALL use strong cipher suites only:
+- TLS_AES_256_GCM_SHA384
+- TLS_CHACHA20_POLY1305_SHA256
+- TLS_AES_128_GCM_SHA256
+
+**AVB-SEC-004:** THE AgentVoiceBox system SHALL implement certificate pinning for external API calls (OpenAI, Groq).
+
+**AVB-SEC-005:** THE AgentVoiceBox system SHALL use mTLS for internal service-to-service communication.
+
+**AVB-SEC-006:** THE AgentVoiceBox system SHALL implement network policies restricting pod-to-pod communication.
+
+### 15.2 Input Validation
+
+**AVB-SEC-010:** THE AgentVoiceBox system SHALL validate all JSON input against schema before processing.
+
+**AVB-SEC-011:** THE AgentVoiceBox system SHALL reject requests with payload size exceeding 10MB.
+
+**AVB-SEC-012:** THE AgentVoiceBox system SHALL sanitize all string inputs to prevent injection attacks.
+
+**AVB-SEC-013:** THE AgentVoiceBox system SHALL validate audio data format and reject malformed audio.
+
+**AVB-SEC-014:** THE AgentVoiceBox system SHALL limit conversation item count to 1000 per session.
+
+**AVB-SEC-015:** THE AgentVoiceBox system SHALL limit text content length to 100,000 characters per item.
+
+### 15.3 Authentication Security
+
+**AVB-SEC-020:** THE AgentVoiceBox system SHALL use cryptographically secure random tokens (256-bit entropy).
+
+**AVB-SEC-021:** THE AgentVoiceBox system SHALL hash API keys using Argon2id before storage.
+
+**AVB-SEC-022:** THE AgentVoiceBox system SHALL implement token expiration with maximum TTL of 24 hours.
+
+**AVB-SEC-023:** THE AgentVoiceBox system SHALL implement token revocation with immediate effect.
+
+**AVB-SEC-024:** THE AgentVoiceBox system SHALL rate limit authentication attempts (10 failures per minute per IP).
+
+**AVB-SEC-025:** WHEN authentication fails 10 times THEN AgentVoiceBox SHALL block IP for 15 minutes.
+
+### 15.4 Authorization Security
+
+**AVB-SEC-030:** THE AgentVoiceBox system SHALL implement principle of least privilege for all operations.
+
+**AVB-SEC-031:** THE AgentVoiceBox system SHALL validate tenant_id on every request.
+
+**AVB-SEC-032:** THE AgentVoiceBox system SHALL prevent horizontal privilege escalation between tenants.
+
+**AVB-SEC-033:** THE AgentVoiceBox system SHALL prevent vertical privilege escalation to admin functions.
+
+**AVB-SEC-034:** THE AgentVoiceBox system SHALL log all authorization decisions for audit.
+
+### 15.5 Data Security
+
+**AVB-SEC-040:** THE AgentVoiceBox system SHALL encrypt sensitive data at rest using AES-256-GCM.
+
+**AVB-SEC-041:** THE AgentVoiceBox system SHALL use envelope encryption with KMS-managed keys.
+
+**AVB-SEC-042:** THE AgentVoiceBox system SHALL implement field-level encryption for PII.
+
+**AVB-SEC-043:** THE AgentVoiceBox system SHALL securely delete data using cryptographic erasure.
+
+**AVB-SEC-044:** THE AgentVoiceBox system SHALL implement data masking for non-production environments.
+
+### 15.6 Secrets Security
+
+**AVB-SEC-050:** THE AgentVoiceBox system SHALL load secrets from HashiCorp Vault or Kubernetes Secrets.
+
+**AVB-SEC-051:** THE AgentVoiceBox system SHALL NEVER store secrets in:
+- Source code
+- Configuration files
+- Container images
+- Log files
+- Error messages
+
+**AVB-SEC-052:** THE AgentVoiceBox system SHALL rotate secrets automatically every 90 days.
+
+**AVB-SEC-053:** THE AgentVoiceBox system SHALL support secret rotation without service restart.
+
+**AVB-SEC-054:** THE AgentVoiceBox system SHALL audit all secret access events.
+
+**AVB-SEC-055:** THE AgentVoiceBox system SHALL use short-lived credentials (1 hour max) for external services.
+
+### 15.7 Container Security
+
+**AVB-SEC-060:** THE AgentVoiceBox containers SHALL run as non-root user (UID 1000).
+
+**AVB-SEC-061:** THE AgentVoiceBox containers SHALL use read-only root filesystem.
+
+**AVB-SEC-062:** THE AgentVoiceBox containers SHALL drop all Linux capabilities except required ones.
+
+**AVB-SEC-063:** THE AgentVoiceBox containers SHALL use seccomp profiles to restrict syscalls.
+
+**AVB-SEC-064:** THE AgentVoiceBox containers SHALL be scanned for vulnerabilities before deployment.
+
+**AVB-SEC-065:** THE AgentVoiceBox containers SHALL use distroless or minimal base images.
+
+### 15.8 API Security
+
+**AVB-SEC-070:** THE AgentVoiceBox system SHALL implement CORS with explicit origin whitelist.
+
+**AVB-SEC-071:** THE AgentVoiceBox system SHALL set security headers:
+- `Strict-Transport-Security: max-age=31536000; includeSubDomains`
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+- `Content-Security-Policy: default-src 'none'`
+
+**AVB-SEC-072:** THE AgentVoiceBox system SHALL implement request signing for webhook callbacks.
+
+**AVB-SEC-073:** THE AgentVoiceBox system SHALL validate Content-Type header on all requests.
+
+### 15.9 DDoS Protection
+
+**AVB-SEC-080:** THE AgentVoiceBox system SHALL implement connection rate limiting per IP (100 conn/sec).
+
+**AVB-SEC-081:** THE AgentVoiceBox system SHALL implement request rate limiting per session (100 req/min).
+
+**AVB-SEC-082:** THE AgentVoiceBox system SHALL implement bandwidth limiting per session (10 MB/min).
+
+**AVB-SEC-083:** THE AgentVoiceBox system SHALL detect and block slowloris attacks.
+
+**AVB-SEC-084:** THE AgentVoiceBox system SHALL implement SYN flood protection at load balancer.
+
+### 15.10 Compliance
+
+**AVB-SEC-090:** THE AgentVoiceBox system SHALL comply with GDPR data protection requirements.
+
+**AVB-SEC-091:** THE AgentVoiceBox system SHALL support data subject access requests (DSAR).
+
+**AVB-SEC-092:** THE AgentVoiceBox system SHALL support right to erasure (data deletion).
+
+**AVB-SEC-093:** THE AgentVoiceBox system SHALL maintain data processing records.
+
+**AVB-SEC-094:** THE AgentVoiceBox system SHALL implement data breach notification procedures.
+
+**AVB-SEC-095:** THE AgentVoiceBox system SHALL pass SOC 2 Type II audit requirements.
+
+---
+
+## 16. Error Handling Requirements
+
+### 16.1 Error Classification
+
+**AVB-ERR-001:** THE AgentVoiceBox system SHALL classify errors into categories:
+
+| Category | HTTP Code | Retry | User Visible |
+|----------|-----------|-------|--------------|
+| Client Error | 4xx | No | Yes |
+| Server Error | 5xx | Yes | Generic |
+| Transient Error | 503 | Yes (backoff) | Generic |
+| Fatal Error | 500 | No | Generic |
+
+### 16.2 Error Response Format
+
+**AVB-ERR-010:** THE AgentVoiceBox system SHALL return errors in consistent JSON format:
+
+```json
+{
+  "type": "error",
+  "error": {
+    "type": "invalid_request_error",
+    "code": "missing_required_field",
+    "message": "The 'session_id' field is required",
+    "param": "session_id",
+    "event_id": "evt_abc123"
+  }
+}
+```
+
+**AVB-ERR-011:** THE AgentVoiceBox system SHALL include correlation_id in all error responses.
+
+**AVB-ERR-012:** THE AgentVoiceBox system SHALL NOT expose internal stack traces in production errors.
+
+### 16.3 Error Recovery
+
+**AVB-ERR-020:** WHEN transient error occurs THEN AgentVoiceBox SHALL retry with exponential backoff (1s, 2s, 4s, 8s, 16s max).
+
+**AVB-ERR-021:** WHEN retry limit exceeded THEN AgentVoiceBox SHALL return error to client with retry_after header.
+
+**AVB-ERR-022:** WHEN circuit breaker opens THEN AgentVoiceBox SHALL return 503 with estimated recovery time.
+
+**AVB-ERR-023:** THE AgentVoiceBox system SHALL implement dead letter queue for failed async operations.
+
+### 16.4 Error Logging
+
+**AVB-ERR-030:** THE AgentVoiceBox system SHALL log all errors with severity level.
+
+**AVB-ERR-031:** THE AgentVoiceBox system SHALL include in error logs:
+- timestamp
+- correlation_id
+- session_id
+- tenant_id
+- error_type
+- error_message
+- stack_trace (internal only)
+- request_context
+
+**AVB-ERR-032:** THE AgentVoiceBox system SHALL alert on error rate exceeding threshold (>1% of requests).
+
+---
+
+## Appendix E: File Structure Reference
+
+```
+/app/
+├── src/
+│   ├── gateway/
+│   ├── workers/
+│   └── shared/
+├── config/
+│   ├── default.yaml
+│   └── production.yaml
+├── migrations/
+└── tests/
+
+/models/                    # Persistent Volume
+├── whisper/
+│   └── v1.0/
+│       ├── model.bin
+│       └── checksum.sha256
+└── kokoro/
+    └── v1.0/
+        ├── kokoro-v1.0.onnx
+        ├── voices-v1.0.bin
+        └── checksum.sha256
+
+/voices/                    # Persistent Volume
+└── kokoro/
+    ├── am_onyx/
+    ├── am_puck/
+    └── af_bella/
+
+/certs/                     # Secrets Volume
+├── tls.crt
+├── tls.key
+└── ca.crt
+
+/tmp/                       # Ephemeral
+└── agentvoicebox/
+    └── audio_debug/
+
+/var/log/                   # Log Volume (optional)
+└── agentvoicebox/
+    ├── app.log
+    └── app.log.1.gz
+```
+
+---
+
+## Appendix F: Security Checklist
+
+| Category | Requirement | Status |
+|----------|-------------|--------|
+| **Transport** | TLS 1.3 enforced | ☐ |
+| **Transport** | Strong ciphers only | ☐ |
+| **Transport** | Certificate validation | ☐ |
+| **Auth** | Token-based authentication | ☐ |
+| **Auth** | Token expiration | ☐ |
+| **Auth** | Rate limited auth attempts | ☐ |
+| **Authz** | Tenant isolation | ☐ |
+| **Authz** | Least privilege | ☐ |
+| **Data** | Encryption at rest | ☐ |
+| **Data** | PII field encryption | ☐ |
+| **Data** | Secure deletion | ☐ |
+| **Secrets** | Vault integration | ☐ |
+| **Secrets** | No hardcoded secrets | ☐ |
+| **Secrets** | Rotation support | ☐ |
+| **Container** | Non-root user | ☐ |
+| **Container** | Read-only filesystem | ☐ |
+| **Container** | Vulnerability scanning | ☐ |
+| **Input** | Schema validation | ☐ |
+| **Input** | Size limits | ☐ |
+| **Input** | Sanitization | ☐ |
+| **Logging** | No secrets in logs | ☐ |
+| **Logging** | PII redaction | ☐ |
+| **Audit** | Auth events logged | ☐ |
+| **Audit** | Authz decisions logged | ☐ |
+| **DDoS** | Rate limiting | ☐ |
+| **DDoS** | Connection limiting | ☐ |
+| **Compliance** | GDPR ready | ☐ |
+| **Compliance** | SOC 2 ready | ☐ |
+
+---
+
+**Document Revision:** 1.1.0  
+**Added Sections:** 13 (File Handling), 14 (Compression), 15 (Enhanced Security), 16 (Error Handling)  
+**Date:** 2025-12-08
+
