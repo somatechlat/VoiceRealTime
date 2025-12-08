@@ -1,0 +1,107 @@
+# =============================================================================
+# OVOS Voice Agent - Docker Build Ignore
+# =============================================================================
+
+# Git
+.git
+.gitignore
+.gitattributes
+.github
+
+# Documentation (not needed in container)
+*.md
+!README.md
+docs/
+_posts/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.sublime-*
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.tox/
+.nox/
+htmlcov/
+.coverage
+*.egg-info/
+.eggs/
+venv/
+.venv/
+env/
+
+# Node.js (if not needed in container)
+node_modules/
+.next/
+.contentlayer
+
+# Environment files (inject at runtime)
+.env
+.env.*
+!.env.example
+
+# Large files / media
+*.mp4
+*.mov
+*.wav
+*.flac
+*.mp3
+*.zip
+*.tar.gz
+public/assets/blog/
+
+# ML Models (download at runtime or mount as volume)
+*.onnx
+*.pt
+*.pth
+*.bin
+*.safetensors
+cache/
+models/
+
+# Test files
+tests/
+*_test.py
+test_*.py
+conftest.py
+pytest.ini
+tox.ini
+
+# Build artifacts
+build/
+dist/
+*.egg
+
+# Logs
+*.log
+logs/
+
+# Local overrides
+docker-compose.override.yml
+docker-compose.local.yml
+*.local
+
+# Kubernetes manifests (not needed in image)
+k8s/
+helm/
+*.yaml
+!docker-compose.yml
+!requirements*.txt
+!pyproject.toml
+
+# Specs and planning docs
+.kiro/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Terraform
+.terraform/
+*.tfstate*

@@ -1,53 +1,33 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# =============================================================================
+# OVOS Voice Agent - Production .gitignore
+# =============================================================================
 
-# dependencies
-/node_modules
-/.pnp
-.pnp.js
-
-# testing
-/coverage
-
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
-.DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# local env files
-.env*.local
-
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-
-.contentlayer
-
-/public/robots.txt
-/public/sitemap.xml
-/public/sitemap-0.xml
-
-
-
-# --- Python / tooling / editor ---
+# -----------------------------------------------------------------------------
+# Python
+# -----------------------------------------------------------------------------
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
 *.pyi
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
 # Virtual environments
 .venv/
@@ -56,52 +36,208 @@ env/
 ENV/
 venv.bak/
 */venv/
+.conda/
 
-# pip / wheel
+# pip
+pip-log.txt
+pip-delete-this-directory.txt
 pip-wheel-metadata/
-*.egg-info/
-.eggs/
 
-# Testing / coverage
+# Testing
 .pytest_cache/
 .tox/
+.nox/
 coverage.xml
+*.cover
+*.coverage
+.coverage.*
 htmlcov/
+.hypothesis/
+nosetests.xml
 
-# mypy cache
+# Type checking
 .mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+.pyre/
 
-# Editor / IDE
+# -----------------------------------------------------------------------------
+# Node.js / Frontend
+# -----------------------------------------------------------------------------
+node_modules/
+/.pnp
+.pnp.js
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# Next.js
+/.next/
+/out/
+.contentlayer
+
+# Build outputs
+/build
+/dist
+
+# -----------------------------------------------------------------------------
+# IDE / Editor
+# -----------------------------------------------------------------------------
 .vscode/
 .idea/
 *.sublime-project
 *.sublime-workspace
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
 
-# Logs and runtime
-*.log
-*.sqlite3
-*.db
+# -----------------------------------------------------------------------------
+# OS Generated
+# -----------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
 
-# Secrets and env files
-# Ignore real env files but allow example templates
+# -----------------------------------------------------------------------------
+# Environment & Secrets (CRITICAL - NEVER COMMIT)
+# -----------------------------------------------------------------------------
 .env
 .env.*
 !.env.example
-!.env.example.*
+!.env.*.example
+*.local
 secrets.yml
+secrets.yaml
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+credentials.json
+service-account*.json
 
-# Large media (prefer Git LFS)
+# -----------------------------------------------------------------------------
+# Large Files / Media (Use Git LFS or external storage)
+# -----------------------------------------------------------------------------
 *.mp4
 *.mov
 *.mkv
 *.avi
+*.webm
 *.wav
 *.flac
+*.mp3
+*.ogg
+*.aac
 *.zip
 *.tar
 *.tar.gz
 *.tgz
+*.rar
+*.7z
+*.gz
+*.bz2
+*.xz
+*.iso
+*.dmg
+*.exe
+*.msi
+*.deb
+*.rpm
 
-# macOS
-.DS_Store
+# ML Models (download at runtime, don't commit)
+*.onnx
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+*.joblib
+cache/
+models/
+*.gguf
+*.ggml
+
+# -----------------------------------------------------------------------------
+# Docker
+# -----------------------------------------------------------------------------
+# Don't ignore Dockerfile or docker-compose, but ignore runtime artifacts
+.docker/
+docker-compose.override.yml
+docker-compose.local.yml
+
+# -----------------------------------------------------------------------------
+# Logs & Runtime Data
+# -----------------------------------------------------------------------------
+*.log
+logs/
+*.sqlite3
+*.db
+*.sqlite
+data/
+tmp/
+temp/
+.cache/
+
+# -----------------------------------------------------------------------------
+# Kubernetes / Helm (local overrides)
+# -----------------------------------------------------------------------------
+*.kubeconfig
+kubeconfig
+values.local.yaml
+values.override.yaml
+
+# -----------------------------------------------------------------------------
+# Terraform / Infrastructure
+# -----------------------------------------------------------------------------
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# -----------------------------------------------------------------------------
+# Project Specific
+# -----------------------------------------------------------------------------
+# Generated docs
+/public/robots.txt
+/public/sitemap.xml
+/public/sitemap-0.xml
+
+# TypeScript build info
+*.tsbuildinfo
+next-env.d.ts
+
+# Vercel
+.vercel
+
+# Test artifacts
+test-results/
+playwright-report/
+playwright/.cache/
+
+# Profiling
+*.prof
+*.lprof
 
