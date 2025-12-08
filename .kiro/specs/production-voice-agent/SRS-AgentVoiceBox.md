@@ -1520,3 +1520,619 @@ All requirements SHALL be traceable to:
 **Added Sections:** 13 (File Handling), 14 (Compression), 15 (Enhanced Security), 16 (Error Handling)  
 **Date:** 2025-12-08
 
+ 
+
+iceBox tVo Agenct:**
+**Proje018  EEE 29148:2ISO/IEC/Ice:** *Complian** 200+  
+*ts:emen Requir*Totalew  
+*ing Revit - Pends:** Drafcument Statu
+
+**Do
+---tions |
+emetry secckup, Telsafe, Baailsion, Fmpresng, CoFile Handli Added  |-12-0820251.0 | | 1.ion |
+ creatInitial SRS12-08 | 0.0 | 2025-| 1.--|
+--|-----------|----|-----es |
+| Changion | Date y
+
+| Versistor Hvision Document Re
+##--
+.
+
+- directory/`dashboardsana//deploy/grafin `provided s will be igurationd confhboar JSON
+
+DasDashboarda rafan GAppendix G:``
+
+### 
+`etected"acklog d"STT queue bmmary:         su  tions:
+ota  ann       warning
+ity:   severls:
+              labefor: 5m
+ 
+         10000h >t_queue_deptcebox_stpr: agentvoi
+        exlogBackeBoxQueue AgentVoic- alert:      
+
+          s"s 2 secondency exceedlatmary: "P99        sum   ions:
+notat     anitical
+   rity: cr  seve      
+  bels:        la
+r: 5m  fo
+           ) > 2
+     t[5m])s_buckeon_secondduratiage_ay_messgatewx_agentvoiceboate(           r.99, 
+ e(0_quantilgram    histor: |
+      xp
+        eatencyoxHighL AgentVoiceBrt:- ale              
+ cted"
+  dete error rateary: "High    summ
+      tions:     annotaritical
+   : c    severitys:
+      abel       l5m
+ :       for1
+  .0al[5m])) > 0messages_totebox_e(agentvoicum(rat   / s      [5m])) 
+ rs_total_errogentvoicebox(rate(a        sumr: |
+         exprorRate
+ eBoxHighErVoiclert: Agent- a       rules:
+les
+   cebox.runtvoiame: age- n:
+  upsceBox
+groor AgentVois ferting ruleetheus all
+# Proms
+
+```yamerting Ruleix F: Alppend A
+
+###
+```0']:909['llm-workerargets: :
+      - tigsic_conf   statr'
+ orkebox-llm-w'agentvoice_name:  - job  
+ 090']
+    worker:9'tts-: [argets
+      - tgs:nfitic_co
+    staworker'ebox-tts-: 'agentvoicame 
+  - job_n    ']
+ worker:9090ets: ['stt-rg      - taonfigs:
+static_corker'
+    -woicebox-stttv_name: 'agen job -cs
+    
+ /metri_path: metrics
+    0']ay:909ets: ['gatew - targ     gs:
+onfiic_cat    stay'
+atew-gboxgentvoice 'ame: job_nafigs:
+  -_conrape
+
+scfigape coneus scrour Promethy this to y
+# CopeBoxVoicted by Agent expors metrics
+# Prometheul```yam
+
+ReferenceMetrics  Complete ndix E:pe
+
+### Apendicesvised App## 20. Re
+---
+
+sion |
+ata compres BSD/GPL | D | 1.5+ | | zstdessionComprbackup |
+| se  DatabaIT |.49+ | Mst | 2pgBackReckup | tgreSQL Ba Pos---|
+|------|----|-----------|--------------------|---e |
+|---pos| Purse on | Licenersi Vnology |t | Tech| ComponenBackup
+
+7 
+### 19.loyment |
+uous depntinche-2.0 | Co | ApagoCD | 2.9+ GitOps | Arng |
+|ackagietes p0 | KubernApache-2.+ | 13Helm | 3.er | kage Managion |
+| Pactrat orches | Container-2.0+ | Apachenetes | 1.28| Kuberestration on |
+| Orchizatitainer Conche-2.0 |+ | Apacker | 24 DoContainers || ----|
+|--------|-------------------|----|--------|-------
+se |urpocense | Pn | Liiorsogy | Venolonent | Tech| Comp
+
+eployment9.6 Dg |
+
+### 1nninrability sca Vulneache-2.0 || 0.48+ | Apivy ning | Tr |
+| Scanonautomatite ca| Certifi0 e-2.ch3+ | Apa | 1.1managerrt-s | cecateifint |
+| Certnagemets maSecre BUSL-1.1 | lt | 1.15+ |Corp Vaushiets | Ha| Secr---|
+-----|-----------|------|----|---------------|------se |
+| Purpo| License rsion y | Ve Technolog Component |
+
+| Security9.5
+### 1 |
+lert routing2.0 | A| Apache-6+ er | 0.2| Alertmanagting  Aler
+|ection |llcoe-2.0 | Log ch | Apamtail | 2.9+ipper | ProShn |
+| Log io aggregatL-3.0 | Log | AGP Loki | 2.9+ng |ggi|
+| Log ted tracin | Distribupache-2.0 | 1.52+ | AgeraeTracing | Jn |
+| Visualizatio AGPL-3.0 |  |afana | 10+s | Groard |
+| Dashblection col| Metrics Apache-2.0 .48+ | 2metheus | | Pro|
+| Metrics--------|----|--------------------|-----------|---
+|---- | Purpose |License| Version | Technology Component | y
+
+| vabilit.4 Obser
+### 19e |
+nferencIT | Model i | Me | 1.16+untimX R | ONNtimeML Run
+| TTS engine || Backup  MIT 1.2+ || Piper | lback TTS Falthesis |
+| ch syn.0 | Spee+ | Apache-2.0 | 1o-ONNXe | KokorS EnginTT| on |
+h recogniti| Speec0+ | MIT isper | 1.Wh | Faster- Engine
+| STT-|---|--------------------|------|------------|------
+|--| Purpose |License | ersion  Vnology |Techent | pon
+
+| Com/ML### 19.3 AIoling |
+
+onnection postgreSQL c | Po ISCr | 1.21+ | PgBounce |oln Po| Connectiotorage |
+le s Audio fi| AGPL-3.0 |est MinIO | Latt Storage | jecObe |
+| storagrsistent tgreSQL | Pe16+ | PosreSQL |  Postg Database |s |
+|b, streamtate, pub/suon sD-3 | Sessi+ | BSuster | 7.2is ClState | Red Cache/----|
+|------|-|----------------|-----------------|----
+|--pose |se | Purcen Liion |ersy | Vhnologonent | Tecge
+
+| Comp Data Stora9.2 |
+
+### 1ondistributi work ge queue,essa| MBSD-3 .2+ |  | 7amss Streueue | Redi|
+| Task Qloop e event formanc0 | High-perhe-2.ac/Ap | MIT | 0.19+| uvloopRuntime  Async  |
+|vercket ser HTTP/WebSo | MIT |9+PI | 0.10y | FastA| API Gatewaation |
+LS termin routing, T| WebSocket GPL-2.0  2.8+ |oxy | HAPralancer |Load B-------|
+| ---------|---|---------|--------------|
+|--------Purpose || ense icon | LVersiechnology | t | Tonen Compucture
+
+|frastr In9.1 Core
+
+### 1ogy Stackole Technrcn Sou9. Ope-
+
+## 1s.
+
+--S connectionTLr all icates foer certifdate servvali SHALL emsystx entVoiceBoAgHE * TET-033:*.
+
+**AVB-N using HTTPSPI callsxternal Al e alencrypt SHALL ox systemtVoiceB** THE Agen2:NET-03
+**AVB-sing TLS.
+nections uconeSQL tgrypt Posm SHALL encrteBox sys AgentVoiceT-031:** THE
+**AVB-NEusing TLS.
+ions onnectedis c RALL encryptSHem ceBox systAgentVoi** THE ET-030:VB-Nit
+
+**Ain Trans 18.4 Data 
+
+###.c by defaulttraffitwork er neothll  am SHALL deny systeeBoxHE AgentVoic-023:** TVB-NETTCP |
+
+**A90 | ces | 90vi| All Sers metheuP |
+| Pro432 | TC 5greSQL | Post| Workers |P |
+ | TC 6379| Redis |kers | Wor2 | TCP |
+543greSQL | | Postteway  TCP |
+| Gas | 6379 || Rediway ateCP |
+| G0 | T 800 | Gateway |Balancer
+| Load ----|----|------------|--|-----------ol |
+|---- | Protoc | PortationDestin
+| Source | rvices:
+ sebetweents porry ecessay nL allow onlem SHALBox systiceAgentVoTHE NET-022:** 
+**AVB-ication.
+ communct podo restriies tNetworkPolicKubernetes L use tem SHALBox sysVoiceAgentE ET-021:** THB-N.
+
+**AVnlyork oivate netwer prnicate ovALL commuervices SHnal sBox intergentVoice* THE AB-NET-020:*ty
+
+**AVSecurik nal Networernt
+### 18.3 I
+st).d at reteryp (encets Secrbernetesicates in Kustore certif SHALL systemBox Voiceent13:** THE Ag
+**AVB-NET-0mTLS.
+ice o-servservice-tr nal CA foerL use intAL SHBox systemoicentVHE Age12:** TVB-NET-0**Aficates.
+
+ublic certipt for ps Encrypport Let' sum SHALLeBox systeE AgentVoic11:** THAVB-NET-0.
+
+**sioningte provi certificatomaticauager for se cert-manALL um SHsteiceBox sytVo** THE Agen10:T-0-NEent
+
+**AVBate Managemrtific Ce8.2s).
+
+### 1um 7 daynimy (mi expirbeforeertificates  cate TLSrot SHALL eBox systemE AgentVoic6:** THNET-00.
+
+**AVB-age=31536000with max-S  HSTLL enablex system SHAoiceBoHE AgentV05:** TET-0
+
+**AVB-NLS 1.1.TLS 1.0, T, sable SSLv3tem SHALL diceBox sysoi THE AgentVB-NET-004:***AVSHA256
+
+*CM_AES_128_GLS_A256
+- T05_SH_POLY13S_CHACHA20 TL_SHA384
+-_256_GCM_AESr):
+- TLSin ordes (pher suitellowing cifoL use the ation SHALS configurx TLceBo AgentVoi-003:** THE
+**AVB-NETly.
+r suites onphee ciwith securllback .2 as faTLS 1ALL support tem SHiceBox sys AgentVo002:** THE
+**AVB-NET-ections.
+ternal conn3 for all ex1.use TLS  SHALL systemeBox HE AgentVoicNET-001:** T*AVB-n
+
+*guratioConfi18.1 TLS 
+### ments
+reity Requicurwork Se and Netansmission
+## 18. Tr
+
+---
+.to-refreshn and auelectio s rangeort times SHALL supprddashboatVoiceBox ** THE Agen-052:*AVB-TELrs.
+
+*atorate indicurn e SLO bcludLL in SHAardsBox dashboiceE AgentVo:** THL-051
+
+**AVB-TEons |commendating reion, scalizatiliource utResapacity | |
+| Crt history erts, aleActive alrts | 
+| Ales, errors |e limitsage, rattenant uPer- Tenant | rics |
+|metnetwork ostgreSQL, e | Redis, Ptructurfras
+| Insage |PU ue depths, Geuormance, quTS/LLM perfT/Trs | ST
+| Worke, latency |oughput thrsagetrics, mesnnection meeway | Co
+| Gat|atus O sttrics, SLth, key meystem heal | Siew-|
+| Overv---|------------ose |
+|----urp | P| Dashboardds for:
+
+arfana dashbo provide Graem SHALL systiceBoxAgentVoHE ** TEL-050:)
+
+**AVB-Trds (Grafanaoa7.5 Dashb
+
+### 1nd grouping.uplication aert dedimplement alALL m SH systeBoxiceE AgentVo043:** THVB-TEL-y.
+
+**Aerit sev based onEmailuty/Slack/gerDe to PaALL routox alerts SHceBTHE AgentVoi** 42:**AVB-TEL-0ng |
+
+| Warniry < 7d  | cert_expioonrtExpiringS |
+| Ce0m | Warningfor 1e > 90% pu_usag | c
+| HighCPU| Warning |% for 10m age > 90y_usemorry | mhMemo |
+| Higningarfor 5m | W> 10000 eue_depth log | quBack|
+| Queue Critical  |or 5m < min funtcorker_erDown | work Wo
+|| Critical | 1m p == 0 fors_u| postgretgresDown 
+| PosCritical |for 1m | s_up == 0 wn | redi| RedisDoical |
+ | Crit 99% for 5mility <ilability | ava| LowAvailab |
+riticalor 5m | Cy > 2s ftencp99_lahLatency |  Hig
+|itical |for 5m | Cr > 1% rror_raterorRate | ehEr--|
+| Hig--|--------|--------------|
+|--verity  | Seonditionlert | Cts:
+
+| Aaleral icowing crithe foll tL implementSHAL system gentVoiceBox AHETEL-041:** Tr.
+
+**AVB-ageantm Alerheusin Prometine alerts L defsystem SHALx gentVoiceBo** THE AB-TEL-040:
+
+**AVertmanager)ting (Al7.4 Alert.
+
+### 1 restarhoutwitruntime nge at hael cg levt loALL supporsystem SHntVoiceBox ge034:** THE ATEL-
+
+**AVB-s in Loki.r 30 day logs foetaintem SHALL r sysceBoxtVoiTHE Agen33:** AVB-TEL-0ail.
+
+**romtki via Pgs to LoL ship loAL SHystem siceBoxntVo* THE AgeB-TEL-032:*|
+
+**AVicable) plils (if apetarror d `error` | E
+|sage |e` | Log mesag
+| `mess |fiertienant idennt_id` | TnaD |
+| `teession IiceBox sgentVoion_id` | A`sesspan ID |
+| emetry s | OpenTeln_id`
+| `spa ID |raceetry tpenTelemd` | Oace_itrifier |
+| `ance identInst` | nstance|
+| `iname vice e` | Ser| `servicRROR) |
+O, WARN, ENFG, IDEBUel ( Log levevel` | `l|
+|imestamp  t ISO 8601` |`timestamp----|
+| ------|---|-------ption |
+ | Descri
+| Field:
+ieldstandard f include s SHALLx logsentVoiceBo** THE Ag-031:
+**AVB-TELat.
+N formlogs in JSOt LL outpu system SHAVoiceBoxAgent030:** THE 
+**AVB-TEL-
+(Loki/ELK)d Logging tructure.3 S
+### 17 latency.
+ highrors orh errequests wit trace waysALL alystem SHox sentVoiceB** THE Ag5:B-TEL-02
+**AV
+ble).iguraction (confdu% in proraces at 1ple tL samsystem SHALBox gentVoice4:** THE ATEL-02
+
+**AVB- callsal API- Externference
+M in
+- LLsthesiS synTTn
+- transcriptioes
+- STT reSQL queriPostgions
+- edis operatessing
+- Rssage procSocket me- Webfor:
+spans lude LL inc SHAeBox tracesE AgentVoicEL-023:** THVB-Tctor.
+
+**Ale Jaeger colaces toL export trsystem SHALBox E AgentVoice TH-022:**
+
+**AVB-TELers.ext headontce CTraa W3C t virace contexagate tm SHALL propsysteox oiceBtV Agen* THEB-TEL-021:*.
+
+**AVservicesfor all ry tracing nTelemetnt OpemeLL implem SHAtex sysiceBogentVoE A:** TH*AVB-TEL-020
+
+*nTelemetry)eger/Ope Tracing (Jatributed 17.2 Dis |
+
+###ent)mpon type, cos: (label Errorster |oun | Cal`errors_tottvoicebox_
+| `agen |ant, type)els: tenable tokens (labnter | Billouotal` | Cns_t_tokeingicebox_billagentvo |
+| `ant, type)bels: tenns (laioiolatate limit vunter | Rtal` | Cohits_toe_limit_ratox_oiceb
+| `agentv----------||------|---
+|--------scription |ype | Dec | T
+
+| Metris Metrics8 Busines## 17.1.ons |
+
+##tiol connecostgreSQL pouge | Pve` | Gaactinnections_ostgres_cox_poicebogentvncy |
+| `a lateQLgreS| Postistogram s` | Hndion_seco_duratresicebox_postgvo|
+| `agenteration) opabels:  queries (l| PostgreSQLr untetal` | Coies_togres_quercebox_postagentvoi|
+| `ions ool connectedis p Gauge | Rs_active` |ection_redis_connvoiceboxgent
+| `ais latency |gram | Red Histo |onds`secis_duration_ebox_redtvoicgen`and) |
+|  commas:ds (labeldis comman | Reunter| Co` totalmmands__redis_coebox `agentvoic-----|
+|------------|---------|-iption |
+|Descr| Type | c Metri| 
+
+icscture Metr.7 Infrastru## 17.1|
+
+##ed, 1=open) closreaker (0=rcuit b| Cie` | Gauge _statuit_breakercircllm_ebox_oictv `agenquests |
+|ding LLM rege | Pen` | Gauue_depthbox_llm_queoiceagentvtput) |
+| `/ou=inputabels: type | Tokens (lCountertal` | ens_toox_llm_tokvoiceb
+| `agent |tokenirst  Time to f |togramconds` | Hisoken_se_first_tox_llmiceb| `agentvome |
+tierence Total inf| Histogram onds` | tion_secbox_llm_duraoicegentv|
+| `astatus) ider, rovabels: pts (lM reques| LLer  Count` |s_totalequest_llm_reboxntvoic `age
+|--------|----|-----|--------|--ion |
+script| Type | De
+| Metric rics
+ Met LLM Worker.6# 17.1###|
+
+ses  syntheledCancel Counter | al` |ons_tots_cancellatitvoicebox_tts |
+| `agen TTS requeste | Pending| Gaugdepth` ue_quets_ox_tntvoiceb`age
+| sized |hesyntracters nter | Cha` | Coualcters_totx_tts_charaentvoicebo| `ag chunk |
+audioto first gram | Time nds` | Histounk_secofirst_chtts_ebox_agentvoic `s time |
+|hesi Total syntam |s` | Histogration_secondbox_tts_dur `agentvoice |
+|ice), vols: statusts (labeTTS requester | ounal` | Cotrequests_tts_cebox_t| `agentvoi---------|
+----|---------|--ion |
+|---riptType | Desctric | rics
+
+| Meeter MS Work7.1.5 TT|
+
+#### 1e mory usage | GPU metes` | Gaug_byu_memory_gp_stteboxic
+| `agentvocentage |ization pertil | GPU u| Gaugeization` tiltt_gpu_uvoicebox_s |
+| `agentze sicessingprom | Batch stograize` | Hich_sebox_stt_bat| `agentvoicquests |
+TT re SdingPenGauge | pth` | queue_debox_stt_tvoice| `agenduration |
+udio m | Input aistograconds` | H_duration_sex_stt_audioagentvoicebo
+| `n latency |nscriptiogram | TraHistonds` | ation_secoebox_stt_duragentvoicage) |
+| `angutatus, l(labels: ssts que| STT rer ounte| Ctotal` sts_que_stt_receboxvoi
+| `agent-----------||------|--------on |
+|--scripti Type | De |
+| Metricetrics
+Worker M 17.1.4 STT 
+####e) |
+ls: typvents (labeter | VAD e | Counal`ions_totad_detectox_ventvoiceb `ag |
+|unk durationchram | Audio  Histog` |dsion_seconratudio_dutvoicebox_a
+| `agen, format) |rections: dites (label| Audio byter l` | Counota_bytes_tudiox_abontvoice `ageion) |
+|direct (labels: ocesseds prchunkter | Audio oun Cks_total` |audio_chunicebox_ `agentvo--|
+|----------|--------|----- |
+|--iptionescre | D Typ Metric |trics
+
+| Pipeline Meudio A17.1.3 |
+
+#### bels: type)items (laonversation er | Count Cotal` |ms_tession_itetvoicebox_sagene |
+| `fetimon liam | Sessigr | Histoseconds`duration_ssion_icebox_se| `agentvo|
+ sessions nt active Curree` | Gauge |ons_activsiicebox_ses| `agentvonant) |
+bels: teted (las crea Sessionounter |otal` | Cns_tioox_sessgentvoiceb-----|
+| `a---|----------
+|--------|-ption |rie | Desc Typ |ic| Metr
+s
+tricsion Me2 Ses17.1.
+#### |
+cy enuth lat AHistogram |econds` | on_sduratiateway_auth_tvoicebox_g`agen|
+| status) abels:  (lttempts Auth a| Counter |total` teway_auth_oicebox_ga| `agentv|
+y latencg  Processinogram |nds` | Histation_seco_duray_messageebox_gatewvoic `agent|
+|ribution e distize s | Messag | Histograme_bytes`izage_say_messcebox_gatewoi|
+| `agentv) us, statypels: tsed (labeages proces MessCounter |tal` | messages_toay_tewtvoicebox_ga
+| `agenions |ctnnective co | Current age` | Gaus_active_connectionbox_gatewaytvoice| `agen status) |
+abels:tions (lconnecr | Total ` | Counteotalonnections_t_gateway_coxeb| `agentvoic-|
+-------------|---------|---
+|-|ion script| Type | DeMetric s
+
+| iceway MetrGat### 17.1.1 `.
+
+#c>_<unit>ent>_<metriox_<componentvoiceb: `ag conventionss namingometheuollow Prcs SHALL ficeBox metrintVo AgeHE-003:** T*AVB-TELices.
+
+*ython servor Plibrary fus-client  prometheHALL usesystem StVoiceBox en:** THE AgEL-002B-T**AVervices.
+
+L st for ALndpoinmetrics` eics on `/theus metrxpose PromeLL esystem SHAVoiceBox HE Agent** T001:
+**AVB-TEL-
+metheus)ProCollection (s 1 Metric# 17.##ments
+
+rebility Requind Observa Telemetry a-
+
+## 17.--ours.
+
+ithin 72 hests weletion requDPR data dpport G SHALL sustemtVoiceBox sy* THE AgenVB-BK-032:**A
+*.
+dsecorh <1M rtenants witr rs foin 24 houxport withata ete dpleL com SHALtemx sysAgentVoiceBo THE :**AVB-BK-031rmat.
+
+**in JSON fort ata expont dtena support tem SHALLeBox sys AgentVoicK-030:** THE
+
+**AVB-Brtata Expo.4 D
+### 16ployments.
+al decriticer for  failovross-regionL support c system SHALentVoiceBox THE AgB-BK-023:**y.
+
+**AVarterlrocedures quecovery p rterd test disasent anumSHALL docsystem oiceBox ntVAge22:** THE VB-BK-0**Aours.
+
+ hof 4TO) jective (R Time Obecoveryort RALL suppSHstem x syntVoiceBo1:** THE Age*AVB-BK-02
+
+* hour.PO) of 1(Rjective ery Point Ob Recovsupportem SHALL ceBox systntVoiTHE AgeBK-020:** VB-
+**Aecovery
+ter R Disas
+
+### 16.3 days. 7 forotsedis snapshain RHALL retm S systetVoiceBox THE Agen-BK-013:**VB.
+
+**Aurly storage ho to objecteplicatedbe r SHALL dis backupsRentVoiceBox Age** THE AVB-BK-012:
+**d.
+ every seconyncnce with fs persisteALL use AOFs SHRedieBox AgentVoic:** THE 011
+**AVB-BK-inutes.
+ every 15 mnapshots RDB ss SHALL useox RedientVoiceB THE AgVB-BK-010:**
+**Ap
+edis Backu6.2 Rup.
+
+### 1rifybacksing pg_verity daily uup integify backSHALL versystem tVoiceBox THE AgenBK-008:** 
+**AVB-g AES-256.
+ckups usin encrypt baSHALLem x systeBogentVoicE A7:** THVB-BK-00|
+
+**Ahs ont12 mhly full | Mont weeks |
+| ull | 4ly f Weekdays |
+| | 7 ementalily incr
+| Dars |l | 24 houementa Hourly incr--------|
+|-------|n |
+|--Retentio| :
+
+| Type ording to accpsin backuLL retaHABox system SentVoice THE Ag**VB-BK-006:gion.
+
+**Aity zone/re availabilteed in separaL be storups SHALbackVoiceBox entHE Ag005:** TVB-BK-**A
+
+ recovery.imen-tint-iing for porchivinuous WAL a contperformtem SHALL Box sysVoicegent* THE A04:*K-0
+
+**AVB-B 6 hours.veryp ekuactal bincremenrm LL perfo SHAsystementVoiceBox ** THE AgBK-003:
+**AVB-).
+00 UTC 02:Sundaykly (l backup weeorm fulLL perfx system SHAeBoentVoicAgE  TH:**002BK-VB-nt.
+
+**Agemenaup mareSQL backor Postgst fackReuse pgBALL em SHsystVoiceBox  THE AgentK-001:****AVB-B
+
+ackup BeSQL6.1 Postgrts
+
+### 1menvery Requireter Reco and Disasackup
+## 16. B
+ent.
+
+---` ev.recoveredsystem `nts viad clienecte contifyox SHALL nooiceBgentVHEN Ade T degraded moiting WHEN ex2:**-05VB-FS
+**A event.
+degraded`a `system. clients viy connectedL notifeBox SHALgentVoice THEN Ad modring degrade WHEN enteFS-051:**
+**AVB-memory |
+g from xistine e, servnsio connectject newailable | Reunavne | Redis ffli Orites |
+|e, queue wis cache from Redervle | SunavailabQL stgreS Po Read-Only |onse |
+|out AI respwithdge cknowlecho/a Ee |blila unava-Only | LLMo |
+| Audio audithoutnscript wi | Send traavailable un TTSText-Only |-|
+| ----------------|-
+|------|- |avior Beher |de | Trigg
+| Moion modes:
+ degradatngollowiort the fL suppem SHALceBox systoiAgentV-050:** THE 
+
+**AVB-FS Modesadationeful Degr## 15.6 Grac
+#es.
+tter messagdead le replay toI dmin APvide a SHALL proemiceBox systntVoTHE Age043:** B-FS-
+
+**AV00.exceeds 10e depth  letter queu when deadalertSHALL emit system iceBox E AgentVoTH-042:** *AVB-FSays.
+
+*7 d for messagesALL retain r queue SHead letteceBox dHE AgentVoiS-041:** T
+
+**AVB-Fies.retrr max  afteletter queueto dead ages failed messoute SHALL rm ox systeiceBAgentVo0:** THE -04VB-FS
+
+**Aer QueueDead Lett## 15.5 
+#.
+ationut propagsed timeo-batext conSHALL useox system tVoiceB* THE Agen31:***AVB-FS-0
+
+ text-only | | Returnessing | 10s TTS procl/error |
+|partiaeturn | R 10s essing |STT proc| ponse |
+k resurn fallbac | Ret 30s LLM API | |
+|r retrys | Queue fote | 5tgreSQL wriPos| /error |
+urn cacheds | Retread | 1greSQL | Post |
+r retryQueue fo| te | 500ms edis wri Rd/error |
+|heturn cac| 100ms | Redis read --|
+| Re------------|---------|-----------t |
+|-----n on Timeou Actio | Timeout |tionOperas:
+
+| ternal call exn ALLouts o timeLL enforceystem SHAntVoiceBox s AgeHE T:**-FS-030
+**AVBent
+anagemeout MTim### 15.4 ts.
+
+tenanr mpact otheNOT iLL  SHAentVoiceBoxN AgHEes Tusts resourcxhant eena* WHEN one t-FS-023:*.
+
+**AVBthcritical pas per pooltion necdis conRerate sepaL use ystem SHALVoiceBox sgentE A TH022:***AVB-FS-or.
+
+*ighbt noisy neeven prenant to t pert requestsit concurrenLL limSHAm Box systeiceAgentVo THE **AVB-FS-021:
+** pools.
+ate threadarg seploads usint workenante tL isola system SHALntVoiceBox** THE Age*AVB-FS-020:ern
+
+*attad P5.3 Bulkhe 1###s.
+
+, rate limiterrorsion ors, validatation errauthenticn: try oNOT reem SHALL ox systentVoiceBE Ag:** TH**AVB-FS-014tryable.
+
+e or non-rebl as retryarorslassify erL cHALsystem SoiceBox THE AgentV:** 13-FS-0VB*A
+
+*mum.axittempts m to 5 aes limit retrisystem SHALLceBox Voigent THE AB-FS-012:**
+**AV
+0.1.tter=max=60s, jiier=2, tipl mulse: base=1s,SHALL utry policy  reentVoiceBox* THE Ag:*11-0
+**AVB-FS.
+nsatio operetryableor all r backoff fonentialement exp SHALL impl systemVoiceBoxnt:** THE AgeS-010AVB-F
+**ms
+try Mechanis15.2 Re## metric.
+
+#it  emandy event  log recoverSHALLoiceBox gentV THEN A closeserakrcuit breWHEN ciB-FS-005:** 
+**AVs.
+econd0 state every 3half-open st SHALL attempt breaker ceBox circuiVoi Agent* THEB-FS-004:*
+
+**AV 10ms.ponse withinaded reshed/degr cacL returnoiceBox SHALHEN AgentVs open T breaker iILE circuit:** WH003S-AVB-F.
+
+**secondsn 60 es withiailursecutive f5 conter afLL open r SHArcuit breakeVoiceBox ciE AgentS-002:** TH
+
+**AVB-Frary.ty libg Tenacis usinnciendexternal depe for all eakersreuit bement circ implSHALLBox system E AgentVoiceTH-001:** B-FS**AV Pattern
+
+uit Breaker.1 Circ
+### 15s
+ RequirementRecoveryand 5. Failsafe  1
+
+---
+
+##orts it.uppen client ss whext responseor t) fi (brBrotlr fe preSHALLx system iceBoAgentVo2:** THE P-03AVB-CM
+
+** br, zstd.oding: gzip,t Accept-Encuppor SHALL sesponseseBox HTTP roictV* THE AgenB-CMP-031:*on.
+
+**AVip compressiSHALL use gzls nal gRPC caleBox inter AgentVoic-030:** THEMP
+**AVB-Cssion
+mpretwork CoNe# 14.4 ng.
+
+##eamieal-time strn for rssioe lz4 compreusping SHALL  shiplogoiceBox  AgentV* THE-CMP-023:**AVB
+*level 9.
+on with pressiuse zstd comes SHALL up fileBox backicgentVo:** THE AMP-022B-Cots.
+
+**AVsnapshDB or Rmpression fcoZF ALL use Lx Redis SHiceBotVoTHE Agen-021:** CMP*AVB-umns.
+
+*B colSONssion for J compreL use TOASTs SHALQL tableox PostgreSoiceB THE AgentV:**-CMP-020
+**AVBression
+Data Comp
+### 14.3 lance.
+ed/ratio baimal spept for olevel 3compression  use zstd  SHALLox systemceBAgentVoi012:** THE CMP-B.
+
+**AVB-er than 1K largsagesfor mesion le compress SHALL enabstemceBox syentVoi* THE Ag-CMP-011:*).
+
+**AVB92sion (RFC 76compres deflate messagepport per- SHALL suonnectionsSocket ceBox WebAgentVoic010:** THE P-CM
+**AVB-ssion
+ssage Compre# 14.2 Medata.
+
+## for voice ioratsion ompres cum 10:1minimchieve HALL assion Sio comprex audiceBoHE AgentVo* TB-CMP-004:*
+
+**AVoptimized).ps (voice-Opus at 24kbg ompress usin ceBox SHALLEN AgentVoicg-term THlonaudio ring EN sto* WHCMP-003:*.
+
+**AVB-chivalr audio arion fopressss com lossleport FLAC supLLx system SHAeBogentVoic2:** THE A-CMP-00
+
+**AVBon).gotiatineient ional cloptsion ( transmisdio au WebSocketus codec forOport  SHALL suppBox systemAgentVoice01:** THE *AVB-CMP-0ression
+
+*1 Audio Comp
+
+### 14.quirementsmpression Re 14. Co##.
+
+---
+
+ restartngs withoutitical setti non-crloadBox SHALL reN AgentVoicenges THEile chafiguration fHEN con32:** WAVB-FH-0
+
+**otify.s using inr changeon files foatiurnfigcowatch tem SHALL Box sysentVoice:** THE Ag31**AVB-FH-0umes.
+
+ead-only volounted as rSHALL be mles ration fiiguiceBox confTHE AgentVo30:** **AVB-FH-0agement
+
+le Manuration FiigConf
+### 13.4 locally.
+ days  7forsed logs omprestain cem SHALL reystceBox sTHE AgentVoiB-FH-023:** 
+**AVssion.
+ zstd comprelogs usingotated  compress rystem SHALLox sAgentVoiceB** THE -FH-022:AVB
+**e.
+tatsing logroat 100MB us al log filetate locSHALL rom systeiceBox E AgentVo* TH21:*B-FH-0ion.
+
+**AVollect log c containerfort/stderr tdou logs to s writeem SHALLeBox systgentVoicHE A020:** T**AVB-FH-ement
+
+ile Manag3.3 Log F 1n.
+
+###atio symlink rotviace restart hout servihot-swap wit model  supportm SHALLeBox systeicHE AgentVo* T:*VB-FH-013**A
+lert.
+l acritica emit start and refuse to iceBox SHALLN AgentVoTHEfails sum  check modelWHEN-012:** FHAVB-ums.
+
+**-256 checksp using SHAat startuegrity intel file odLL verify msystem SHAox entVoiceB1:** THE Ag
+**AVB-FH-01mes.
+stent volursipedOnlyMany tored on Rea be sLLl files SHAodeBox mE AgentVoice0:** TH-01-FH
+**AVBnagement
+ MaFileel # 13.2 Mod
+
+##hecksums.56 cusing SHA-2tegrity in file dio au validatem SHALLox systeceBoiAgentV5:** THE 
+**AVB-FH-00cation.
+edupli dor audio f (CAS)oragestressable ent-adduse contstem SHALL iceBox syntVoTHE Age4:** -FH-00VBr.
+
+**Aintece poeren) with ref(MinIO/S3age  object storam toLL streox SHAAgentVoiceBon THEN er sessieeds 10MB pdio excHEN au-003:** W*AVB-FH
+
+*nutes. mi 5r thanldeudio files oemporary apurge tlly aticaHALL automystem SeBox sntVoic:** THE Age02AVB-FH-0
+
+**ent disk.istNOT on perss volumes, mapped tmpfin memory-les o firy audie tempora SHALL stortemVoiceBox sys* THE AgentAVB-FH-001:*nt
+
+**agemeo File Manudi## 13.1 A
+
+#ements Requirandlingile H3. F
+## 1
+---
+
