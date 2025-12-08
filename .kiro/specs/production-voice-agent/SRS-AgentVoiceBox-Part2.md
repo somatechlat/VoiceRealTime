@@ -342,3 +342,145 @@
 **Document:** AgentVoiceBox SRS Part 2  
 **Total Requirements:** 200+  
 **Compliance:** ISO/IEC/IEEE 29148:2018
+
+
+---
+
+## 20. Data Encryption Requirements
+
+### 20.1 Data in Transit (ALL Communications Encrypted)
+
+**AVB-ENC-001:** ALL external client connections SHALL use TLS 1.3 encryption.
+
+**AVB-ENC-002:** ALL WebSocket audio data SHALL be encrypted via TLS before transmission.
+
+**AVB-ENC-003:** ALL internal service-to-service communication SHALL use mTLS (mutual TLS).
+
+**AVB-ENC-004:** THE AgentVoiceBox Gateway to Redis communication SHALL use TLS encryption.
+
+**AVB-ENC-005:** THE AgentVoiceBox Gateway to PostgreSQL communication SHALL use TLS encryption.
+
+**AVB-ENC-006:** THE AgentVoiceBox Workers to Redis communication SHALL use TLS encryption.
+
+**AVB-ENC-007:** THE AgentVoiceBox to external LLM APIs SHALL use HTTPS (TLS 1.2+).
+
+**AVB-ENC-008:** THE AgentVoiceBox to MinIO/S3 object storage SHALL use HTTPS.
+
+**AVB-ENC-009:** THE AgentVoiceBox backup transfers SHALL use TLS encryption.
+
+**AVB-ENC-010:** THE AgentVoiceBox log shipping (Promtail to Loki) SHALL use TLS.
+
+### 20.2 Data at Rest Encryption
+
+**AVB-ENC-020:** THE AgentVoiceBox PostgreSQL data SHALL be encrypted using pgcrypto or TDE.
+
+**AVB-ENC-021:** THE AgentVoiceBox Redis persistence (RDB/AOF) SHALL be stored on encrypted volumes.
+
+**AVB-ENC-022:** THE AgentVoiceBox backup files SHALL be encrypted using AES-256-GCM.
+
+**AVB-ENC-023:** THE AgentVoiceBox model files on persistent volumes SHALL be stored on encrypted storage.
+
+**AVB-ENC-024:** THE AgentVoiceBox Kubernetes Secrets SHALL be encrypted at rest using etcd encryption.
+
+**AVB-ENC-025:** THE AgentVoiceBox audio files in MinIO/S3 SHALL use server-side encryption (SSE-S3 or SSE-KMS).
+
+### 20.3 Encryption Key Management
+
+**AVB-ENC-030:** THE AgentVoiceBox system SHALL store encryption keys in HashiCorp Vault.
+
+**AVB-ENC-031:** THE AgentVoiceBox system SHALL rotate TLS certificates every 90 days (automated via cert-manager).
+
+**AVB-ENC-032:** THE AgentVoiceBox system SHALL rotate encryption keys annually.
+
+**AVB-ENC-033:** THE AgentVoiceBox system SHALL use separate keys per tenant for tenant data encryption.
+
+**AVB-ENC-034:** THE AgentVoiceBox system SHALL audit all key access events.
+
+### 20.4 Encryption Standards
+
+| Data Type | In Transit | At Rest | Algorithm |
+|-----------|------------|---------|-----------|
+| WebSocket Audio | TLS 1.3 | N/A (streaming) | AES-256-GCM |
+| API Requests | TLS 1.3 | N/A | AES-256-GCM |
+| Redis Data | TLS 1.3 | Volume encryption | AES-256 |
+| PostgreSQL Data | TLS 1.3 | pgcrypto/TDE | AES-256 |
+| Backup Files | TLS 1.3 | AES-256-GCM | AES-256-GCM |
+| Object Storage | HTTPS | SSE-S3/SSE-KMS | AES-256 |
+| Secrets | TLS 1.3 | Vault seal | AES-256-GCM |
+| Logs | TLS 1.3 | Volume encryption | AES-256 |
+
+### 20.5 Encryption Verification
+
+**AVB-ENC-040:** THE AgentVoiceBox system SHALL verify TLS certificate validity on all connections.
+
+**AVB-ENC-041:** THE AgentVoiceBox system SHALL reject connections with invalid/expired certificates.
+
+**AVB-ENC-042:** THE AgentVoiceBox system SHALL log certificate expiration warnings 30 days before expiry.
+
+**AVB-ENC-043:** THE AgentVoiceBox system SHALL support certificate pinning for critical external services.
+
+---
+
+## 21. Complete Data Flow with Encryption
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              CLIENT                                         │
+│                    (Browser/Mobile/IoT)                                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      │ ════════════════════════════════════
+                                      │ TLS 1.3 ENCRYPTED (wss://)
+                                      │ Audio: Base64 over TLS
+                                      │ ══════════════════════════════════════
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         HAPROXY LOAD BALANCER                               │
+│                    TLS Termination + Re-encryption                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      │ ══════════════════════════════════════
+                                      │ mTLS ENCRYPTED (internal)
+                                      │ ══════════════════════════════════════
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         AGENTVOICEBOX GATEWAY                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+          │                           │                           │
+          │ TLS                       │ TLS                       │ TLS
+          ▼                           ▼                           ▼
+┌─────────────────┐         ┌─────────────────┐         ┌─────────────────┐
+│  REDIS CLUSTER  │         │   POSTGRESQL    │         │     WORKERS     │
+│  (TLS + Vol Enc)│         │  (TLS + TDE)    │         │   (mTLS)        │
+└─────────────────┘         └─────────────────┘         └─────────────────┘
+                                      │
+                                      │ TLS
+                                      ▼
+                            ┌─────────────────┐
+                            │  MINIO/S3       │
+                            │  (HTTPS + SSE)  │
+                            └─────────────────┘
+```
+
+### Encryption Summary
+
+| Connection | Protocol | Encryption | Certificate |
+|------------|----------|------------|-------------|
+| Client → HAProxy | WSS | TLS 1.3 | Public (Let's Encrypt) |
+| HAProxy → Gateway | HTTPS | mTLS | Internal CA |
+| Gateway → Redis | Redis+TLS | TLS 1.3 | Internal CA |
+| Gateway → PostgreSQL | PostgreSQL+TLS | TLS 1.3 | Internal CA |
+| Gateway → Workers | gRPC+TLS | mTLS | Internal CA |
+| Workers → Redis | Redis+TLS | TLS 1.3 | Internal CA |
+| Workers → LLM APIs | HTTPS | TLS 1.2+ | Public CA |
+| Any → MinIO | HTTPS | TLS 1.3 | Internal CA |
+| Promtail → Loki | HTTPS | TLS 1.3 | Internal CA |
+| Backup Transfer | HTTPS | TLS 1.3 | Internal CA |
+
+**ZERO PLAINTEXT TRANSMISSION - ALL DATA ENCRYPTED IN TRANSIT**
+
+---
+
+**Document Updated:** 2025-12-08  
+**Encryption Requirements:** AVB-ENC-001 through AVB-ENC-043  
+**Compliance:** SOC 2, GDPR, HIPAA-ready encryption standards
