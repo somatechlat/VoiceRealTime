@@ -44,10 +44,13 @@ services:
       POSTGRES_USER: voice_agent
       POSTGRES_PASSWORD: voice_agent
       POSTGRES_DB: voice_agent
+      # Create additional databases for Keycloak
+      POSTGRES_MULTIPLE_DATABASES: keycloak
     # No host port exposure; internal services connect via the Docker network
     # ports: []
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init-multiple-dbs.sh:/docker-entrypoint-initdb.d/init-multiple-dbs.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U voice_agent -d voice_agent"]
       interval: 10s
@@ -125,6 +128,51 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - voice-engine
+
+  # =============================================================================
+  # KEYCLOAK - Identity & Access Management
+  # Enterprise SSO, SAML/OIDC, RBAC, user management
+  # Requirements: 19.1, 19.2, 19.3, 19.4
+  # =============================================================================
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    command:
+      - start-dev
+      - --import-realm
+    environment:
+      # Admin credentials (change in production!)
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      # Database configuration
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://db:5432/keycloak
+      KC_DB_USERNAME: voice_agent
+      KC_DB_PASSWORD: voice_agent
+      # HTTP settings
+      KC_HTTP_PORT: 8080
+      KC_HOSTNAME_STRICT: "false"
+      KC_PROXY: edge
+      # Features
+      KC_FEATURES: token-exchange,admin-fine-grained-authz
+      # Health
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+    ports:
+      - "8080:8080"
+    volumes:
+      - keycloak-data:/opt/keycloak/data
+      - ./keycloak/realms:/opt/keycloak/data/import:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200 OK'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     networks:
       - voice-engine
 
@@ -217,6 +265,7 @@ volumes:
   redis-data:
   agentvoicebox-data:
   kokoro-models:
+  keycloak-data:
 
 networks:
   voice-engine:

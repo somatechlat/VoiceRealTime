@@ -19,3 +19,7 @@ pytest>=8.0.0
 gunicorn>=22.0.0
 # Added CORS support for browser clients
 Flask-Cors>=4.0.0
+# JWT validation for Keycloak tokens (Requirements 19.4, 19.7)
+PyJWT[crypto]>=2.8.0
+# Keycloak admin client (Requirements 19.2, 19.3)
+python-keycloak>=4.0.0
