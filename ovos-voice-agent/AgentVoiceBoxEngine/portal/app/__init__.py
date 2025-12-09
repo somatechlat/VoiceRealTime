@@ -18,7 +18,7 @@ from typing import AsyncGenerator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routes import api_keys, billing, dashboard, payments, settings, team
+from .routes import api_keys, billing, dashboard, onboarding, payments, settings, team
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,8 @@ def create_app() -> FastAPI:
     app.include_router(payments.router, prefix="/api/v1", tags=["Payments"])
     app.include_router(team.router, prefix="/api/v1", tags=["Team"])
     app.include_router(settings.router, prefix="/api/v1", tags=["Settings"])
-    
+    app.include_router(onboarding.router, prefix="/api/v1/onboarding", tags=["Onboarding"])
+
     @app.get("/health")
     async def health_check():
         """Health check endpoint."""

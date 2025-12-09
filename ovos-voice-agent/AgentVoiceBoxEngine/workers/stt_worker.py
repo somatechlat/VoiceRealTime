@@ -36,16 +36,14 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Import from local worker modules to avoid Flask dependencies
+from .worker_config import RedisSettings
+from .worker_redis import RedisClient
 
-from app.config import RedisSettings
-from app.services.redis_client import RedisClient
-from app.services.redis_streams import (
-    STREAM_AUDIO_STT,
-    GROUP_STT_WORKERS,
-    CHANNEL_TRANSCRIPTION,
-)
+# Stream constants
+STREAM_AUDIO_STT = "audio:stt"
+GROUP_STT_WORKERS = "stt-workers"
+CHANNEL_TRANSCRIPTION = "transcription"
 
 logger = logging.getLogger(__name__)
 

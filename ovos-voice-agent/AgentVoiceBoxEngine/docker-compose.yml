@@ -1,297 +1,223 @@
-version: "3.9"
+# =============================================================================
+# AGENTVOICEBOX - Complete Production Cluster (10GB RAM Limit)
+# =============================================================================
+# Project: agentvoicebox
+# Port Range: 25000-25099
+#
+# RAM Budget (10GB Total):
+#   PostgreSQL:     512MB
+#   Redis:          512MB
+#   Keycloak:       512MB
+#   OVOS Messagebus:256MB
+#   Gateway:        512MB
+#   Portal API:     256MB
+#   Portal Frontend:256MB
+#   STT Worker:     2GB
+#   TTS Worker:     1.5GB
+#   LLM Worker:     512MB
+#   Prometheus:     256MB
+#   Grafana:        256MB
+#   Lago:           1GB
+#   Buffer:         ~1.5GB
+#
+# Run:  docker compose -p agentvoicebox up -d
+# Stop: docker compose -p agentvoicebox down
+#
+# Port Allocation:
+#   25000 - Gateway API (WebSocket/REST)
+#   25001 - Portal API
+#   25002 - PostgreSQL
+#   25003 - Redis
+#   25004 - Keycloak
+#   25005 - Lago API
+#   25006 - Lago Frontend
+#   25007 - Portal Frontend
+#   25008 - Prometheus
+#   25009 - Grafana
+#   25010 - OVOS Messagebus
+#   25011 - Admin UI (static HTML files)
+# =============================================================================
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "5m"
+    max-file: "2"
 
 services:
-  agentvoicebox-engine:
-    build:
-      context: ..
-      dockerfile: AgentVoiceBoxEngine/Dockerfile
-    image: agentvoicebox/engine:latest
-    env_file:
-      - ./settings.docker.env
-    environment:
-      APP_SECRET_KEY: ${APP_SECRET_KEY:-change-me}
-      DATABASE__URI: postgresql+psycopg://voice_agent:voice_agent@db:5432/voice_agent
-      KAFKA__BOOTSTRAP_SERVERS: kafka:9092
-      OPA__URL: http://opa:8181
-      REDIS__URL: redis://redis:6379/0
-    depends_on:
-      db:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      opa:
-        condition: service_started
-    # Expose the API on a fixed host port 20000 (container still listens on 8000)
-    ports:
-      - "20000:8000"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    volumes:
-      - agentvoicebox-data:/app/data
-      - ./policies:/app/policies:ro
-    networks:
-      - voice-engine
+  # ===========================================================================
+  # INFRASTRUCTURE
+  # ===========================================================================
 
-  db:
-    image: postgres:15-alpine
+  postgres:
+    image: postgres:16-alpine
+    container_name: agentvoicebox_postgres
+    hostname: postgres
     environment:
-      POSTGRES_USER: voice_agent
-      POSTGRES_PASSWORD: voice_agent
-      POSTGRES_DB: voice_agent
-      # Create additional databases for Keycloak and Lago
+      POSTGRES_USER: agentvoicebox
+      POSTGRES_PASSWORD: agentvoicebox_secure_2024
+      POSTGRES_DB: agentvoicebox
       POSTGRES_MULTIPLE_DATABASES: keycloak,lago
-    # No host port exposure; internal services connect via the Docker network
-    # ports: []
+    command: >
+      postgres
+      -c shared_buffers=128MB
+      -c effective_cache_size=256MB
+      -c work_mem=2MB
+      -c maintenance_work_mem=32MB
+      -c max_connections=100
+    ports:
+      - "25002:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
       - ./docker/postgres/init-multiple-dbs.sh:/docker-entrypoint-initdb.d/init-multiple-dbs.sh:ro
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U voice_agent -d voice_agent"]
+      test: ["CMD-SHELL", "pg_isready -U agentvoicebox"]
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - voice-engine
-
-  kafka:
-    # Updated to a known tag; bitnami/kafka:latest is available on Docker Hub
-    image: bitnami/kafka:latest
-    environment:
-      - KAFKA_ENABLE_KRAFT=yes
-      - KAFKA_CFG_NODE_ID=1
-      - KAFKA_CFG_PROCESS_ROLES=broker,controller
-      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
-      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
-      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
-      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
-      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
-      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
-      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
-      - KAFKA_CFG_NUM_PARTITIONS=1
-      - KAFKA_CFG_LOG_DIRS=/bitnami/kafka/data
-      - ALLOW_PLAINTEXT_LISTENER=yes
-    # Host port mapping removed – services use internal Docker network
-    # ports: []
-    volumes:
-      - kafka-data:/bitnami/kafka
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "bash",
-          "-c",
-          "/opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list > /dev/null 2>&1",
-        ]
-      interval: 30s
-      timeout: 10s
-      retries: 5
       start_period: 30s
+    logging: *logging
+    restart: unless-stopped
     networks:
-      - voice-engine
-
-  opa:
-    image: openpolicyagent/opa:0.64.1
-    command:
-      - "run"
-      - "--server"
-      - "--addr=0.0.0.0:8181"
-      - "--log-level=info"
-      - "/policies"
-    volumes:
-      - ./policies:/policies:ro
-    # Host port mapping removed – internal services access OPA via its Docker name
-    # ports: []
-    networks:
-      - voice-engine
+      - agentvoicebox-net
 
   redis:
     image: redis:7-alpine
+    container_name: agentvoicebox_redis
+    hostname: redis
     command: >
       redis-server
       --appendonly yes
-      --maxmemory 2gb
+      --maxmemory 400mb
       --maxmemory-policy volatile-lru
-      --save 60 1
-      --loglevel warning
+      --tcp-keepalive 60
     ports:
-      - "6379:6379"
+      - "25003:6379"
     volumes:
       - redis-data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
+      start_period: 10s
+    logging: *logging
+    restart: unless-stopped
     networks:
-      - voice-engine
+      - agentvoicebox-net
 
-  # =============================================================================
-  # KEYCLOAK - Identity & Access Management
-  # Enterprise SSO, SAML/OIDC, RBAC, user management
-  # Requirements: 19.1, 19.2, 19.3, 19.4
-  # =============================================================================
+  # ===========================================================================
+  # OVOS - Open Voice OS Messagebus
+  # ===========================================================================
+
+  ovos-messagebus:
+    image: smartgic/ovos-messagebus:latest
+    container_name: agentvoicebox_ovos-messagebus
+    hostname: ovos-messagebus
+    ports:
+      - "25010:8181"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 8181 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging: *logging
+    restart: unless-stopped
+    networks:
+      - agentvoicebox-net
+
+  # ===========================================================================
+  # IDENTITY - Keycloak
+  # ===========================================================================
+
   keycloak:
     image: quay.io/keycloak/keycloak:24.0
-    command:
-      - start-dev
-      - --import-realm
+    container_name: agentvoicebox_keycloak
+    hostname: keycloak
+    command: start-dev --import-realm
     environment:
-      # Admin credentials (change in production!)
       KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
-      # Database configuration
+      KEYCLOAK_ADMIN_PASSWORD: admin
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://db:5432/keycloak
-      KC_DB_USERNAME: voice_agent
-      KC_DB_PASSWORD: voice_agent
-      # HTTP settings
-      KC_HTTP_PORT: 8080
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: agentvoicebox
+      KC_DB_PASSWORD: agentvoicebox_secure_2024
       KC_HOSTNAME_STRICT: "false"
-      KC_PROXY: edge
-      # Features
-      KC_FEATURES: token-exchange,admin-fine-grained-authz
-      # Health
       KC_HEALTH_ENABLED: "true"
-      KC_METRICS_ENABLED: "true"
+      JAVA_OPTS_APPEND: "-Xms256m -Xmx384m"
     ports:
-      - "8080:8080"
+      - "25004:8080"
     volumes:
-      - keycloak-data:/opt/keycloak/data
       - ./keycloak/realms:/opt/keycloak/data/import:ro
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
     depends_on:
-      db:
+      postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200 OK'"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 60s
+      start_period: 120s
+    logging: *logging
+    restart: unless-stopped
     networks:
-      - voice-engine
+      - agentvoicebox-net
 
-  # STT Worker - Speech-to-Text transcription
-  stt-worker:
-    build:
-      context: .
-      dockerfile: workers/Dockerfile.stt
-    image: agentvoicebox/stt-worker:latest
+
+  # ===========================================================================
+  # BILLING - Lago (All-in-one)
+  # ===========================================================================
+
+  lago:
+    image: getlago/lago:latest
+    container_name: agentvoicebox_lago
+    hostname: lago
     environment:
-      REDIS_URL: redis://redis:6379/0
-      STT_MODEL: base
-      STT_DEVICE: auto
-      STT_COMPUTE_TYPE: float16
-      STT_BATCH_SIZE: 4
-    depends_on:
-      redis:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-    networks:
-      - voice-engine
-
-  # TTS Worker - Text-to-Speech synthesis
-  tts-worker:
-    build:
-      context: .
-      dockerfile: workers/Dockerfile.tts
-    image: agentvoicebox/tts-worker:latest
-    environment:
-      REDIS_URL: redis://redis:6379/0
-      KOKORO_MODEL_DIR: /app/cache/kokoro
-      TTS_DEFAULT_VOICE: am_onyx
-      TTS_DEFAULT_SPEED: "1.1"
-    depends_on:
-      redis:
-        condition: service_healthy
-    volumes:
-      - kokoro-models:/app/cache/kokoro
-    deploy:
-      resources:
-        limits:
-          memory: 3G
-    networks:
-      - voice-engine
-
-  # LLM Worker - Language Model inference
-  llm-worker:
-    build:
-      context: .
-      dockerfile: workers/Dockerfile.llm
-    image: agentvoicebox/llm-worker:latest
-    environment:
-      REDIS_URL: redis://redis:6379/0
-      LLM_DEFAULT_PROVIDER: ${LLM_DEFAULT_PROVIDER:-groq}
-      GROQ_API_KEY: ${GROQ_API_KEY:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
-      LLM_DEFAULT_MODEL: llama-3.1-70b-versatile
-      CIRCUIT_BREAKER_THRESHOLD: "5"
-      CIRCUIT_BREAKER_TIMEOUT: "30"
-    depends_on:
-      redis:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-    networks:
-      - voice-engine
-
-  prometheus:
-    image: prom/prometheus:v2.52.0
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-    volumes:
-      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-    # Host port mapping removed – Prometheus is only needed for internal scraping
-    # ports: []
-    depends_on:
-      - agentvoicebox-engine
-    networks:
-      - voice-engine
-
-  # =============================================================================
-  # LAGO - Usage-Based Billing Engine
-  # Metering, subscriptions, invoicing, payment processor integration
-  # Requirements: 20.1, 20.2, 20.3, 20.4, 20.5
-  # =============================================================================
-  lago-api:
-    image: getlago/api:v1.3.5
-    environment:
-      # Database
-      DATABASE_URL: postgresql://voice_agent:voice_agent@db:5432/lago
+      DATABASE_URL: postgresql://agentvoicebox:agentvoicebox_secure_2024@postgres:5432/lago
       REDIS_URL: redis://redis:6379/1
-      # Rails configuration
-      RAILS_ENV: production
-      SECRET_KEY_BASE: ${LAGO_SECRET_KEY_BASE:-change-me-in-production-use-64-char-hex}
-      RAILS_LOG_TO_STDOUT: "true"
-      # Lago configuration
-      LAGO_API_URL: http://lago-api:3000
-      LAGO_PDF_URL: http://lago-pdf:3000
-      LAGO_FRONT_URL: http://localhost:8081
-      # RSA keys for JWT (generate with: openssl genrsa 2048)
-      LAGO_RSA_PRIVATE_KEY: ${LAGO_RSA_PRIVATE_KEY:-}
-      # Encryption
-      ENCRYPTION_PRIMARY_KEY: ${LAGO_ENCRYPTION_PRIMARY_KEY:-change-me-32-char-encryption-key}
-      ENCRYPTION_DETERMINISTIC_KEY: ${LAGO_ENCRYPTION_DETERMINISTIC_KEY:-change-me-32-char-determ-key}
-      ENCRYPTION_KEY_DERIVATION_SALT: ${LAGO_ENCRYPTION_KEY_DERIVATION_SALT:-change-me-salt}
-      # License (empty for open-source features)
-      LAGO_LICENSE: ""
-      # Disable signup for API-only usage
+      SECRET_KEY_BASE: change-me-64-char-hex-string-for-production
+      ENCRYPTION_PRIMARY_KEY: change-me-32-char-encryption-key!
+      ENCRYPTION_DETERMINISTIC_KEY: change-me-32-char-determ-key!!
+      ENCRYPTION_KEY_DERIVATION_SALT: change-me-salt-value
       LAGO_DISABLE_SIGNUP: "false"
+      RAILS_ENV: production
+      RAILS_LOG_TO_STDOUT: "true"
     ports:
-      - "3000:3000"
+      - "25005:3000"
+      - "25006:80"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
     depends_on:
-      db:
+      postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -300,131 +226,335 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 60s
+      start_period: 120s
+    logging: *logging
+    restart: unless-stopped
     networks:
-      - voice-engine
+      - agentvoicebox-net
 
-  lago-worker:
-    image: getlago/api:v1.3.5
-    command: ["bundle", "exec", "sidekiq", "-C", "config/sidekiq.yml"]
+  # ===========================================================================
+  # APPLICATION - Gateway & Portal
+  # ===========================================================================
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agentvoicebox_gateway
+    hostname: gateway
     environment:
-      DATABASE_URL: postgresql://voice_agent:voice_agent@db:5432/lago
-      REDIS_URL: redis://redis:6379/1
-      RAILS_ENV: production
-      SECRET_KEY_BASE: ${LAGO_SECRET_KEY_BASE:-change-me-in-production-use-64-char-hex}
-      LAGO_API_URL: http://lago-api:3000
-      LAGO_PDF_URL: http://lago-pdf:3000
-      ENCRYPTION_PRIMARY_KEY: ${LAGO_ENCRYPTION_PRIMARY_KEY:-change-me-32-char-encryption-key}
-      ENCRYPTION_DETERMINISTIC_KEY: ${LAGO_ENCRYPTION_DETERMINISTIC_KEY:-change-me-32-char-determ-key}
-      ENCRYPTION_KEY_DERIVATION_SALT: ${LAGO_ENCRYPTION_KEY_DERIVATION_SALT:-change-me-salt}
-      LAGO_LICENSE: ""
+      FLASK_ENV: production
+      APP_SECRET_KEY: change-me-in-production
+      DATABASE__URI: postgresql+psycopg://agentvoicebox:agentvoicebox_secure_2024@postgres:5432/agentvoicebox
+      REDIS__URL: redis://redis:6379/0
+      KAFKA__BOOTSTRAP_SERVERS: localhost:9092
+      OPA__URL: http://localhost:8181
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: agentvoicebox
+      GATEWAY_ID: gateway-1
+      GUNICORN_WORKERS: 2
+    ports:
+      - "25000:8000"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
     depends_on:
-      lago-api:
+      postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    networks:
-      - voice-engine
-
-  lago-pdf:
-    image: getlago/lago-gotenberg:7
-    ports:
-      - "3001:3000"
-    networks:
-      - voice-engine
-
-  lago-front:
-    image: getlago/front:v1.3.5
-    environment:
-      API_URL: http://lago-api:3000
-      APP_ENV: production
-      LAGO_DISABLE_SIGNUP: "false"
-      LAGO_OAUTH_PROVIDERS: ""
-    ports:
-      - "8081:80"
-    depends_on:
-      lago-api:
-        condition: service_healthy
-    networks:
-      - voice-engine
-
-  # =============================================================================
-  # CUSTOMER PORTAL FRONTEND - Next.js 14 Self-Service Portal
-  # Dashboard, API keys, billing, team management, settings
-  # Requirements: 21.1, 21.3, 21.4, 21.5, 21.6, 21.7, 21.8, 21.9, 21.10
-  # =============================================================================
-  portal-frontend:
-    build:
-      context: ./portal-frontend
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: http://localhost:8001
-        NEXT_PUBLIC_KEYCLOAK_URL: http://localhost:8080
-        NEXT_PUBLIC_KEYCLOAK_REALM: agentvoicebox
-        NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: portal-frontend
-    image: agentvoicebox/portal-frontend:latest
-    environment:
-      PORTAL_API_URL: http://portal-api:8001
-    ports:
-      - "3002:3000"
-    depends_on:
-      - keycloak
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 30s
+      retries: 5
+      start_period: 60s
+    logging: *logging
+    restart: unless-stopped
     networks:
-      - voice-engine
+      - agentvoicebox-net
 
-  # =============================================================================
-  # CUSTOMER PORTAL API - FastAPI Backend for Portal
-  # Requirements: 21.1, 21.2
-  # =============================================================================
   portal-api:
     build:
-      context: ..
-      dockerfile: AgentVoiceBoxEngine/Dockerfile
-    image: agentvoicebox/portal-api:latest
-    command: ["uvicorn", "portal.app:app", "--host", "0.0.0.0", "--port", "8001"]
-    env_file:
-      - ./settings.docker.env
+      context: .
+      dockerfile: Dockerfile
+    container_name: agentvoicebox_portal-api
+    hostname: portal-api
+    command: ["gunicorn", "--bind", "0.0.0.0:8001", "--workers", "1", "--worker-class", "gevent", "--timeout", "60", "portal.app:app"]
     environment:
-      DATABASE__URI: postgresql+psycopg://voice_agent:voice_agent@db:5432/voice_agent
+      FLASK_ENV: production
+      APP_SECRET_KEY: change-me-in-production
+      DATABASE__URI: postgresql+psycopg://agentvoicebox:agentvoicebox_secure_2024@postgres:5432/agentvoicebox
       REDIS__URL: redis://redis:6379/0
       KEYCLOAK_URL: http://keycloak:8080
       KEYCLOAK_REALM: agentvoicebox
-      LAGO_API_URL: http://lago-api:3000
-      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
-      PAYPAL_CLIENT_ID: ${PAYPAL_CLIENT_ID:-}
-      PAYPAL_CLIENT_SECRET: ${PAYPAL_CLIENT_SECRET:-}
+      LAGO_API_URL: http://lago:3000
     ports:
-      - "8001:8001"
+      - "25001:8001"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
     depends_on:
-      db:
+      postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      keycloak:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 30s
+      start_period: 60s
+    logging: *logging
+    restart: unless-stopped
     networks:
-      - voice-engine
+      - agentvoicebox-net
+
+  portal-frontend:
+    build:
+      context: ./portal-frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:25001
+        NEXT_PUBLIC_KEYCLOAK_URL: http://localhost:25004
+        NEXT_PUBLIC_KEYCLOAK_REALM: agentvoicebox
+        NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: portal-frontend
+    container_name: agentvoicebox_portal-frontend
+    hostname: portal-frontend
+    ports:
+      - "25007:3000"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+    depends_on:
+      - portal-api
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging: *logging
+    restart: unless-stopped
+    networks:
+      - agentvoicebox-net
+
+
+  # ===========================================================================
+  # WORKERS - STT, TTS, LLM
+  # ===========================================================================
+
+  stt-worker:
+    build:
+      context: .
+      dockerfile: workers/Dockerfile.stt
+    container_name: agentvoicebox_stt-worker
+    hostname: stt-worker
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      STT_MODEL: tiny
+      STT_DEVICE: cpu
+      STT_COMPUTE_TYPE: int8
+      STT_BATCH_SIZE: 2
+      WORKER_ID: stt-worker-1
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import redis; r=redis.from_url('redis://redis:6379/0'); r.ping()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    logging: *logging
+    restart: unless-stopped
+    networks:
+      - agentvoicebox-net
+
+  tts-worker:
+    build:
+      context: .
+      dockerfile: workers/Dockerfile.tts
+    container_name: agentvoicebox_tts-worker
+    hostname: tts-worker
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      KOKORO_MODEL_DIR: /models/kokoro
+      TTS_DEFAULT_VOICE: am_onyx
+      TTS_DEFAULT_SPEED: "1.1"
+      WORKER_ID: tts-worker-1
+    volumes:
+      - kokoro-models:/models/kokoro
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+        reservations:
+          memory: 768M
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import redis; r=redis.from_url('redis://redis:6379/0'); r.ping()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    logging: *logging
+    restart: unless-stopped
+    networks:
+      - agentvoicebox-net
+
+  llm-worker:
+    build:
+      context: .
+      dockerfile: workers/Dockerfile.llm
+    container_name: agentvoicebox_llm-worker
+    hostname: llm-worker
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      LLM_DEFAULT_PROVIDER: ${LLM_DEFAULT_PROVIDER:-groq}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      WORKER_ID: llm-worker-1
+      CIRCUIT_BREAKER_THRESHOLD: "5"
+      CIRCUIT_BREAKER_TIMEOUT: "30"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import redis; r=redis.from_url('redis://redis:6379/0'); r.ping()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging: *logging
+    restart: unless-stopped
+    networks:
+      - agentvoicebox-net
+
+  # ===========================================================================
+  # OBSERVABILITY
+  # ===========================================================================
+
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: agentvoicebox_prometheus
+    hostname: prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=3d"
+      - "--storage.tsdb.retention.size=500MB"
+    ports:
+      - "25008:9090"
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+    logging: *logging
+    restart: unless-stopped
+    networks:
+      - agentvoicebox-net
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: agentvoicebox_grafana
+    hostname: grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: http://localhost:25009
+    ports:
+      - "25009:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./observability/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+    depends_on:
+      - prometheus
+    logging: *logging
+    restart: unless-stopped
+    networks:
+      - agentvoicebox-net
+
+  # ===========================================================================
+  # ADMIN UI - Static HTML Files Server
+  # ===========================================================================
+
+  admin-ui:
+    image: nginx:alpine
+    container_name: agentvoicebox_admin-ui
+    hostname: admin-ui
+    ports:
+      - "25011:80"
+    volumes:
+      - ../advanced-voice.html:/usr/share/nginx/html/advanced-voice.html:ro
+      - ../simple-chat.html:/usr/share/nginx/html/simple-chat.html:ro
+      - ../test-ovos.html:/usr/share/nginx/html/test-ovos.html:ro
+      - ../test-ovos.html:/usr/share/nginx/html/index.html:ro
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+        reservations:
+          memory: 32M
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging: *logging
+    restart: unless-stopped
+    networks:
+      - agentvoicebox-net
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
 
 volumes:
-  pgdata:
-  kafka-data:
+  postgres-data:
   redis-data:
-  agentvoicebox-data:
   kokoro-models:
-  keycloak-data:
+  prometheus-data:
+  grafana-data:
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
 
 networks:
-  voice-engine:
+  agentvoicebox-net:
     driver: bridge

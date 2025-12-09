@@ -1,5 +1,7 @@
 # Enterprise dependencies for OVOS voice agent gateway
 Flask>=3.0.0
+# Redis async client for distributed session management (Requirements 9.1, 9.2)
+redis>=5.0.0
 Flask-Sock>=0.7.0
 Werkzeug>=3.0.0
 prometheus-client>=0.20.0

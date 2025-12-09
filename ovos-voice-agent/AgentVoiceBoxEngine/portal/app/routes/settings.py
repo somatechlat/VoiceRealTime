@@ -261,11 +261,11 @@ async def update_webhook(
     )
 
 
-@router.delete("/settings/webhooks/{webhook_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/settings/webhooks/{webhook_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def delete_webhook(
     webhook_id: str,
     user: UserContext = Depends(require_admin()),
-) -> None:
+):
     """Delete a webhook.
     
     Requires tenant_admin role.

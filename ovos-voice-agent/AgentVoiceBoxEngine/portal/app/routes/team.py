@@ -291,11 +291,11 @@ async def update_member_roles(
         )
 
 
-@router.delete("/team/members/{member_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/team/members/{member_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def remove_team_member(
     member_id: str,
     user: UserContext = Depends(require_admin()),
-) -> None:
+):
     """Remove a team member.
     
     Requires tenant_admin role.

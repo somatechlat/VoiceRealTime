@@ -200,11 +200,11 @@ async def get_api_key(
         )
 
 
-@router.delete("/keys/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/keys/{key_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def revoke_api_key(
     key_id: str,
     user: UserContext = Depends(get_current_user),
-) -> None:
+):
     """Revoke an API key."""
     try:
         from ....app.services.api_key_service import get_api_key_service

@@ -17,7 +17,11 @@ import redis.asyncio as aioredis
 from redis.asyncio.connection import ConnectionPool
 from redis.exceptions import ConnectionError, TimeoutError, RedisError
 
-from ..config import RedisSettings
+# Import RedisSettings - try worker_config first to avoid Flask dependencies
+try:
+    from .worker_config import RedisSettings
+except ImportError:
+    from ..config import RedisSettings
 
 logger = logging.getLogger(__name__)
 

@@ -26,9 +26,10 @@ import pytest
 import pytest_asyncio
 
 # Add app to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+_app_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, _app_root)
 
-# Import directly to avoid __init__.py issues
+# Import directly from module file to avoid loading app/__init__.py (which imports Flask)
 try:
     import asyncpg
     ASYNCPG_AVAILABLE = True
@@ -36,12 +37,18 @@ except ImportError:
     ASYNCPG_AVAILABLE = False
 
 if ASYNCPG_AVAILABLE:
-    from app.services.async_database import (
-        AsyncDatabaseClient,
-        AsyncDatabaseConfig,
-        AsyncConversationRepository,
-        ConversationItemData,
+    import importlib.util
+    _spec = importlib.util.spec_from_file_location(
+        "async_database",
+        os.path.join(_app_root, "app", "services", "async_database.py")
     )
+    _async_db_module = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_async_db_module)
+    
+    AsyncDatabaseClient = _async_db_module.AsyncDatabaseClient
+    AsyncDatabaseConfig = _async_db_module.AsyncDatabaseConfig
+    AsyncConversationRepository = _async_db_module.AsyncConversationRepository
+    ConversationItemData = _async_db_module.ConversationItemData
 else:
     AsyncDatabaseClient = None
     AsyncDatabaseConfig = None

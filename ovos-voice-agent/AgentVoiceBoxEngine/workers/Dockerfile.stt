@@ -2,23 +2,17 @@
 # Speech-to-Text transcription using Faster-Whisper
 #
 # Build: docker build -f workers/Dockerfile.stt -t agentvoicebox/stt-worker .
-# Run: docker run --gpus all -e REDIS_URL=redis://host:6379/0 agentvoicebox/stt-worker
+# Run: docker run -e REDIS_URL=redis://host:6379/0 agentvoicebox/stt-worker
 #
-# Memory limit: 4GB (set via docker run --memory=4g or Kubernetes resources)
+# Memory limit: 2GB (local dev), 4GB (production with GPU)
 
-# Base image with CUDA support for GPU acceleration
-FROM nvidia/cuda:12.1-cudnn8-runtime-ubuntu22.04 AS base
+FROM python:3.11-slim AS base
 
-# Prevent interactive prompts during package installation
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Install Python and system dependencies
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.11 \
-    python3.11-venv \
-    python3-pip \
     libsndfile1 \
     ffmpeg \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for security
@@ -26,7 +20,7 @@ RUN useradd -m -u 1000 worker
 WORKDIR /app
 
 # Create virtual environment
-RUN python3.11 -m venv /app/venv
+RUN python -m venv /app/venv
 ENV PATH="/app/venv/bin:$PATH"
 
 # Install Python dependencies

@@ -173,12 +173,12 @@ async def add_payment_method(
         )
 
 
-@router.delete("/payments/methods/{method_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/payments/methods/{method_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def remove_payment_method(
     method_id: str,
     provider: str,
     user: UserContext = Depends(require_admin()),
-) -> None:
+):
     """Remove a payment method.
     
     Requires tenant_admin role.

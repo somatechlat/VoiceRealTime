@@ -40,11 +40,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, AsyncIterator, Dict, List, Optional
 
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from app.config import RedisSettings
-from app.services.redis_client import RedisClient
+# Import from local worker modules to avoid Flask dependencies
+from .worker_config import RedisSettings
+from .worker_redis import RedisClient
 
 logger = logging.getLogger(__name__)
 

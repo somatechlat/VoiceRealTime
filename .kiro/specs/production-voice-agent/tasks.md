@@ -306,7 +306,7 @@ This implementation plan transforms the existing prototype into a production-rea
   - [x] 22.4 Implement dunning and suspension flow
     - _Requirements: 20.9_
 
-- [ ] 23. Checkpoint - Billing
+- [x] 23. Checkpoint - Billing
   - Ensure all tests pass, ask the user if questions arise.
 
 ---
@@ -335,7 +335,7 @@ This implementation plan transforms the existing prototype into a production-rea
   - [x] 24.7 Implement settings and webhook endpoints
     - _Requirements: 21.8_
 
-- [ ] 25. Checkpoint - Portal Backend
+- [x] 25. Checkpoint - Portal Backend
   - Ensure all tests pass, ask the user if questions arise.
 
 ---
@@ -367,47 +367,47 @@ This implementation plan transforms the existing prototype into a production-rea
   - [x] 26.8 Implement responsive design and WCAG 2.1 AA accessibility
     - _Requirements: 21.10_
 
-- [ ] 27. Checkpoint - Portal Frontend
+- [x] 27. Checkpoint - Portal Frontend
   - Ensure all tests pass, ask the user if questions arise.
 
 ---
 
 ## Phase 12: Tenant Onboarding
 
-- [ ] 28. Onboarding Flow
-  - [ ] 28.1 Implement signup endpoint (creates Keycloak user, Lago customer, first API key)
+- [x] 28. Onboarding Flow
+  - [x] 28.1 Implement signup endpoint (creates Keycloak user, Lago customer, first API key)
     - _Requirements: 24.1, 24.2_
 
-  - [ ] 28.2 Implement signup frontend with email verification
+  - [x] 28.2 Implement signup frontend with email verification
     - _Requirements: 24.2, 24.3_
 
-  - [ ] 28.3 Implement interactive quickstart (test API call)
+  - [x] 28.3 Implement interactive quickstart (test API call)
     - _Requirements: 24.4, 24.5_
 
-  - [ ] 28.4 Implement welcome email template
+  - [x] 28.4 Implement welcome email template
     - _Requirements: 24.3_
 
-  - [ ] 28.5 Implement onboarding milestone tracking
+  - [x] 28.5 Implement onboarding milestone tracking
     - _Requirements: 24.7, 24.8_
 
-- [ ] 29. Checkpoint - Onboarding
+- [x] 29. Checkpoint - Onboarding
   - Ensure all tests pass, ask the user if questions arise.
 
 ---
 
 ## Phase 13: Final Integration & Documentation
 
-- [ ] 30. Integration Testing
-  - [ ] 30.1 End-to-end onboarding test
-  - [ ] 30.2 Billing integration test (Stripe test mode)
-  - [ ] 30.3 Full speech-to-speech pipeline test
-  - [ ] 30.4 Load test with Locust (100 concurrent connections)
+- [x] 30. Integration Testing
+  - [x] 30.1 End-to-end onboarding test
+  - [x] 30.2 Billing integration test (Stripe test mode)
+  - [x] 30.3 Full speech-to-speech pipeline test
+  - [x] 30.4 Load test with Locust (100 concurrent connections)
 
-- [ ] 31. Documentation
-  - [ ] 31.1 Local development guide (Docker Compose setup)
+- [-] 31. Documentation
+  - [x] 31.1 Local development guide (Docker Compose setup)
     - _Requirements: 18.1, 18.4_
 
-  - [ ] 31.2 OpenAPI 3.1 spec for REST endpoints
+  - [x] 31.2 OpenAPI 3.1 spec for REST endpoints
     - _Requirements: 18.1_
 
   - [ ] 31.3 AsyncAPI spec for WebSocket events
