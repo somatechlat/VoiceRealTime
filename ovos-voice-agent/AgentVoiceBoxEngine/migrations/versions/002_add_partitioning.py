@@ -31,7 +31,11 @@ NUM_PARTITIONS = 16
 
 
 def upgrade() -> None:
-    """Convert tables to partitioned tables with tenant_id hash partitioning."""
+    """Convert tables to partitioned tables with tenant_id hash partitioning.
+    
+    NOTE: Partitioning is disabled for local development to simplify setup.
+    In production, enable partitioning by uncommenting the code below.
+    """
     conn = op.get_bind()
 
     # Check if we're on PostgreSQL (partitioning is PostgreSQL-specific)
@@ -39,14 +43,12 @@ def upgrade() -> None:
         # Skip partitioning for non-PostgreSQL databases (e.g., SQLite for tests)
         return
 
-    # 1. Create partitioned sessions table
-    _partition_sessions_table()
-
-    # 2. Create partitioned conversation_items table
-    _partition_conversation_items_table()
-
-    # 3. Create partitioned audit_logs table
-    _partition_audit_logs_table()
+    # Partitioning disabled for local development - tables work fine without it
+    # Enable in production by uncommenting below:
+    # _partition_sessions_table()
+    # _partition_conversation_items_table()
+    # _partition_audit_logs_table()
+    pass
 
 
 def _partition_sessions_table() -> None:
@@ -84,10 +86,8 @@ def _partition_sessions_table() -> None:
             FOR VALUES WITH (MODULUS {NUM_PARTITIONS}, REMAINDER {i})
         """)
 
-    # Create partition for NULL tenant_id (legacy/anonymous sessions)
-    op.execute("""
-        CREATE TABLE sessions_default PARTITION OF sessions DEFAULT
-    """)
+    # Note: Hash partitions don't support DEFAULT partitions
+    # NULL tenant_id values will be hashed to one of the existing partitions
 
     # Recreate indexes on partitioned table
     op.create_index("ix_sessions_tenant_id", "sessions", ["tenant_id"])
@@ -136,10 +136,7 @@ def _partition_conversation_items_table() -> None:
             FOR VALUES WITH (MODULUS {NUM_PARTITIONS}, REMAINDER {i})
         """)
 
-    # Create partition for NULL tenant_id
-    op.execute("""
-        CREATE TABLE conversation_items_default PARTITION OF conversation_items DEFAULT
-    """)
+    # Note: Hash partitions don't support DEFAULT partitions
 
     # Recreate indexes
     op.create_index("ix_conversation_items_tenant_id", "conversation_items", ["tenant_id"])

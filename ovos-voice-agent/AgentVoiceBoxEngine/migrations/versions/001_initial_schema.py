@@ -25,22 +25,18 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Create enum types
-    tenant_tier = postgresql.ENUM("free", "pro", "enterprise", name="tenanttier")
-    tenant_status = postgresql.ENUM("active", "suspended", "deleted", name="tenantstatus")
-    project_env = postgresql.ENUM("production", "staging", "development", name="projectenvironment")
-    
-    tenant_tier.create(op.get_bind(), checkfirst=True)
-    tenant_status.create(op.get_bind(), checkfirst=True)
-    project_env.create(op.get_bind(), checkfirst=True)
+    # Create enum types first using raw SQL to avoid SQLAlchemy auto-creation issues
+    op.execute("CREATE TYPE tenanttier AS ENUM ('free', 'pro', 'enterprise')")
+    op.execute("CREATE TYPE tenantstatus AS ENUM ('active', 'suspended', 'deleted')")
+    op.execute("CREATE TYPE projectenvironment AS ENUM ('production', 'staging', 'development')")
 
-    # Tenants table
+    # Tenants table - use postgresql.ENUM with create_type=False since we created them above
     op.create_table(
         "tenants",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column("name", sa.String(255), nullable=False),
-        sa.Column("tier", tenant_tier, nullable=False, server_default="free"),
-        sa.Column("status", tenant_status, nullable=False, server_default="active"),
+        sa.Column("tier", postgresql.ENUM("free", "pro", "enterprise", name="tenanttier", create_type=False), nullable=False, server_default="free"),
+        sa.Column("status", postgresql.ENUM("active", "suspended", "deleted", name="tenantstatus", create_type=False), nullable=False, server_default="active"),
         sa.Column("billing_id", sa.String(255), nullable=True),
         sa.Column("settings", postgresql.JSONB, nullable=False, server_default="{}"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
@@ -55,7 +51,7 @@ def upgrade() -> None:
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column("tenant_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False),
         sa.Column("name", sa.String(255), nullable=False),
-        sa.Column("environment", project_env, nullable=False, server_default="development"),
+        sa.Column("environment", postgresql.ENUM("production", "staging", "development", name="projectenvironment", create_type=False), nullable=False, server_default="development"),
         sa.Column("settings", postgresql.JSONB, nullable=False, server_default="{}"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
     )

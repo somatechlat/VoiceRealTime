@@ -98,6 +98,8 @@ services:
     environment:
       POSTGRES_USER: agentvoicebox
       POSTGRES_PASSWORD: agentvoicebox_secure_pwd_2024
+      # Allow non-SSL connections from any host (local development only)
+      POSTGRES_HOST_AUTH_METHOD: trust
       POSTGRES_DB: agentvoicebox
       POSTGRES_INITDB_ARGS: "--data-checksums"
       PGDATA: /var/lib/postgresql/data/pgdata

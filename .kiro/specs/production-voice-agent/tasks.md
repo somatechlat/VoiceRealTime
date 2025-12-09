@@ -245,7 +245,7 @@ This implementation plan transforms the existing prototype into a production-rea
     - Test cross-tenant access denial
     - _Requirements: 3.1, 3.2, 3.5, 1.2, 1.3_
 
-- [-] 18.6. Checkpoint - Real Infrastructure Tests
+- [ ] 18.6. Checkpoint - Real Infrastructure Tests
   - All tests run against real Docker Compose stack
   - No mocks, no fakes, no stubs
   - Verify actual latencies meet SLA targets
