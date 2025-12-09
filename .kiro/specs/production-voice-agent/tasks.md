@@ -313,26 +313,26 @@ This implementation plan transforms the existing prototype into a production-rea
 
 ## Phase 10: Customer Portal Backend
 
-- [ ] 24. Portal API
-  - [ ] 24.1 Create FastAPI portal service with Keycloak auth middleware
+- [-] 24. Portal API
+  - [x] 24.1 Create FastAPI portal service with Keycloak auth middleware
     - _Requirements: 21.1, 21.2_
 
-  - [ ] 24.2 Implement dashboard endpoints (usage, billing, health)
+  - [x] 24.2 Implement dashboard endpoints (usage, billing, health)
     - _Requirements: 21.3, 21.5_
 
-  - [ ] 24.3 Implement API key management endpoints
+  - [x] 24.3 Implement API key management endpoints
     - _Requirements: 21.4_
 
-  - [ ] 24.4 Implement billing endpoints (plan, invoices, upgrade/downgrade)
+  - [x] 24.4 Implement billing endpoints (plan, invoices, upgrade/downgrade)
     - _Requirements: 21.6, 21.7_
 
-  - [ ] 24.5 Implement payment method endpoints
+  - [x] 24.5 Implement payment method endpoints
     - _Requirements: 22.3, 22.4, 22.6_
 
-  - [ ] 24.6 Implement team management endpoints
+  - [x] 24.6 Implement team management endpoints
     - _Requirements: 21.9_
 
-  - [ ] 24.7 Implement settings and webhook endpoints
+  - [x] 24.7 Implement settings and webhook endpoints
     - _Requirements: 21.8_
 
 - [ ] 25. Checkpoint - Portal Backend
