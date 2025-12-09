@@ -1,0 +1,1134 @@
+asyncapi: 3.0.0
+info:
+  title: AgentVoiceBox WebSocket API
+  version: 1.0.0
+  description: |
+    Real-time WebSocket protocol for voice conversations.
+    Compatible with OpenAI Realtime API.
+    
+    ## Authentication
+    Connect with Bearer token in Authorization header or `access_token` query parameter.
+    Tokens are ephemeral (10-minute TTL) and single-use.
+    
+    ## Audio Format
+    - Input: PCM16, 24kHz, mono, base64-encoded
+    - Output: PCM16, 24kHz, mono, base64-encoded
+    
+    ## Connection Flow
+    1. Obtain ephemeral token via POST /v1/realtime/sessions
+    2. Connect to WebSocket with token
+    3. Receive session.created event
+    4. Send/receive events
+    5. Connection closes on token expiry or explicit close
+  contact:
+    name: AgentVoiceBox Support
+    url: https://agentvoicebox.com/support
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  development:
+    host: localhost:25000
+    protocol: ws
+    description: Local development server
+  production:
+    host: api.agentvoicebox.com
+    protocol: wss
+    description: Production server (TLS 1.3 required)
+
+channels:
+  realtime:
+    address: /v1/realtime
+    description: |
+      Main WebSocket endpoint for real-time voice conversations.
+      Requires Bearer authentication.
+    messages:
+      # Client -> Server events
+      sessionUpdate:
+        $ref: '#/components/messages/SessionUpdate'
+      inputAudioBufferAppend:
+        $ref: '#/components/messages/InputAudioBufferAppend'
+      inputAudioBufferCommit:
+        $ref: '#/components/messages/InputAudioBufferCommit'
+      inputAudioBufferClear:
+        $ref: '#/components/messages/InputAudioBufferClear'
+      conversationItemCreate:
+        $ref: '#/components/messages/ConversationItemCreate'
+      responseCreate:
+        $ref: '#/components/messages/ResponseCreate'
+      responseCancel:
+        $ref: '#/components/messages/ResponseCancel'
+      # Server -> Client events
+      sessionCreated:
+        $ref: '#/components/messages/SessionCreated'
+      sessionUpdated:
+        $ref: '#/components/messages/SessionUpdated'
+      inputAudioBufferCommitted:
+        $ref: '#/components/messages/InputAudioBufferCommitted'
+      inputAudioBufferCleared:
+        $ref: '#/components/messages/InputAudioBufferCleared'
+      inputAudioBufferSpeechStarted:
+        $ref: '#/components/messages/InputAudioBufferSpeechStarted'
+      inputAudioBufferSpeechStopped:
+        $ref: '#/components/messages/InputAudioBufferSpeechStopped'
+      conversationItemCreated:
+        $ref: '#/components/messages/ConversationItemCreated'
+      conversationItemInputAudioTranscriptionCompleted:
+        $ref: '#/components/messages/TranscriptionCompleted'
+      responseCreated:
+        $ref: '#/components/messages/ResponseCreated'
+      responseOutputItemAdded:
+        $ref: '#/components/messages/ResponseOutputItemAdded'
+      responseAudioTranscriptDelta:
+        $ref: '#/components/messages/ResponseAudioTranscriptDelta'
+      responseDone:
+        $ref: '#/components/messages/ResponseDone'
+      responseCancelled:
+        $ref: '#/components/messages/ResponseCancelled'
+      responseAudioDelta:
+        $ref: '#/components/messages/ResponseAudioDelta'
+      responseAudioDone:
+        $ref: '#/components/messages/ResponseAudioDone'
+      responseTextDelta:
+        $ref: '#/components/messages/ResponseTextDelta'
+      responseTextDone:
+        $ref: '#/components/messages/ResponseTextDone'
+      error:
+        $ref: '#/components/messages/Error'
+      rateLimitsUpdated:
+        $ref: '#/components/messages/RateLimitsUpdated'
+
+operations:
+  # Client -> Server operations
+  sendSessionUpdate:
+    action: send
+    channel:
+      $ref: '#/channels/realtime'
+    summary: Update session configuration
+    description: Modify voice, instructions, tools, or other session settings
+    messages:
+      - $ref: '#/channels/realtime/messages/sessionUpdate'
+
+  sendAudioBuffer:
+    action: send
+    channel:
+      $ref: '#/channels/realtime'
+    summary: Stream audio input
+    description: Append base64-encoded PCM16 audio chunks to the input buffer
+    messages:
+      - $ref: '#/channels/realtime/messages/inputAudioBufferAppend'
+
+  commitAudioBuffer:
+    action: send
+    channel:
+      $ref: '#/channels/realtime'
+    summary: Commit audio for processing
+    description: Signal that audio input is complete and ready for transcription
+    messages:
+      - $ref: '#/channels/realtime/messages/inputAudioBufferCommit'
+
+  clearAudioBuffer:
+    action: send
+    channel:
+      $ref: '#/channels/realtime'
+    summary: Clear audio buffer
+    description: Discard accumulated audio without processing
+    messages:
+      - $ref: '#/channels/realtime/messages/inputAudioBufferClear'
+
+  createConversationItem:
+    action: send
+    channel:
+      $ref: '#/channels/realtime'
+    summary: Add conversation item
+    description: Add a text message or function call result to the conversation
+    messages:
+      - $ref: '#/channels/realtime/messages/conversationItemCreate'
+
+  createResponse:
+    action: send
+    channel:
+      $ref: '#/channels/realtime'
+    summary: Request assistant response
+    description: Trigger the assistant to generate a response based on conversation context
+    messages:
+      - $ref: '#/channels/realtime/messages/responseCreate'
+
+  cancelResponse:
+    action: send
+    channel:
+      $ref: '#/channels/realtime'
+    summary: Cancel in-progress response
+    description: Stop ongoing TTS synthesis and LLM generation within 50ms
+    messages:
+      - $ref: '#/channels/realtime/messages/responseCancel'
+
+  # Server -> Client operations
+  receiveSessionCreated:
+    action: receive
+    channel:
+      $ref: '#/channels/realtime'
+    summary: Session established
+    description: Sent immediately after successful WebSocket connection and authentication
+    messages:
+      - $ref: '#/channels/realtime/messages/sessionCreated'
+
+  receiveSessionUpdated:
+    action: receive
+    channel:
+      $ref: '#/channels/realtime'
+    summary: Session configuration changed
+    description: Confirms session.update was applied successfully
+    messages:
+      - $ref: '#/channels/realtime/messages/sessionUpdated'
+
+  receiveAudioBufferCommitted:
+    action: receive
+    channel:
+      $ref: '#/channels/realtime'
+    summary: Audio buffer committed
+    description: Confirms audio was committed and transcription started
+    messages:
+      - $ref: '#/channels/realtime/messages/inputAudioBufferCommitted'
+
+  receiveSpeechStarted:
+    action: receive
+    channel:
+      $ref: '#/channels/realtime'
+    summary: Voice activity detected
+    description: Server VAD detected speech in the audio stream
+    messages:
+      - $ref: '#/channels/realtime/messages/inputAudioBufferSpeechStarted'
+
+  receiveSpeechStopped:
+    action: receive
+    channel:
+      $ref: '#/channels/realtime'
+    summary: Voice activity ended
+    description: Server VAD detected end of speech
+    messages:
+      - $ref: '#/channels/realtime/messages/inputAudioBufferSpeechStopped'
+
+  receiveConversationItemCreated:
+    action: receive
+    channel:
+      $ref: '#/channels/realtime'
+    summary: Conversation item added
+    description: A new item was added to the conversation history
+    messages:
+      - $ref: '#/channels/realtime/messages/conversationItemCreated'
+
+  receiveTranscriptionCompleted:
+    action: receive
+    channel:
+      $ref: '#/channels/realtime'
+    summary: Transcription complete
+    description: STT processing finished, transcript available
+    messages:
+      - $ref: '#/channels/realtime/messages/conversationItemInputAudioTranscriptionCompleted'
+
+  receiveResponseCreated:
+    action: receive
+    channel:
+      $ref: '#/channels/realtime'
+    summary: Response generation started
+    description: Assistant began generating a response
+    messages:
+      - $ref: '#/channels/realtime/messages/responseCreated'
+
+  receiveResponseOutputItemAdded:
+    action: receive
+    channel:
+      $ref: '#/channels/realtime'
+    summary: Output item added to response
+    description: A new output item (message, function call) was added to the response
+    messages:
+      - $ref: '#/channels/realtime/messages/responseOutputItemAdded'
+
+  receiveAudioTranscriptDelta:
+    action: receive
+    channel:
+      $ref: '#/channels/realtime'
+    summary: Streaming transcript chunk
+    description: Incremental transcript of the assistant's audio response
+    messages:
+      - $ref: '#/channels/realtime/messages/responseAudioTranscriptDelta'
+
+  receiveAudioResponse:
+    action: receive
+    channel:
+      $ref: '#/channels/realtime'
+    summary: Streaming audio chunk
+    description: Base64-encoded PCM16 audio chunk from TTS synthesis
+    messages:
+      - $ref: '#/channels/realtime/messages/responseAudioDelta'
+
+  receiveAudioDone:
+    action: receive
+    channel:
+      $ref: '#/channels/realtime'
+    summary: Audio streaming complete
+    description: All audio chunks for this response have been sent
+    messages:
+      - $ref: '#/channels/realtime/messages/responseAudioDone'
+
+  receiveTextDelta:
+    action: receive
+    channel:
+      $ref: '#/channels/realtime'
+    summary: Streaming text chunk
+    description: Incremental text from LLM generation
+    messages:
+      - $ref: '#/channels/realtime/messages/responseTextDelta'
+
+  receiveTextDone:
+    action: receive
+    channel:
+      $ref: '#/channels/realtime'
+    summary: Text streaming complete
+    description: Full text response is available
+    messages:
+      - $ref: '#/channels/realtime/messages/responseTextDone'
+
+  receiveResponseDone:
+    action: receive
+    channel:
+      $ref: '#/channels/realtime'
+    summary: Response complete
+    description: All response generation finished, includes usage statistics
+    messages:
+      - $ref: '#/channels/realtime/messages/responseDone'
+
+  receiveResponseCancelled:
+    action: receive
+    channel:
+      $ref: '#/channels/realtime'
+    summary: Response cancelled
+    description: Response generation was stopped due to cancel request
+    messages:
+      - $ref: '#/channels/realtime/messages/responseCancelled'
+
+  receiveError:
+    action: receive
+    channel:
+      $ref: '#/channels/realtime'
+    summary: Error occurred
+    description: An error occurred during processing
+    messages:
+      - $ref: '#/channels/realtime/messages/error'
+
+  receiveRateLimitsUpdated:
+    action: receive
+    channel:
+      $ref: '#/channels/realtime'
+    summary: Rate limits updated
+    description: Current rate limit status, sent periodically and after limit changes
+    messages:
+      - $ref: '#/channels/realtime/messages/rateLimitsUpdated'
+
+components:
+  messages:
+    SessionUpdate:
+      name: session.update
+      title: Update Session
+      summary: Update session configuration
+      description: Modify voice, instructions, tools, or other session settings at runtime
+      payload:
+        type: object
+        required:
+          - type
+          - session
+        properties:
+          type:
+            type: string
+            const: session.update
+          session:
+            $ref: '#/components/schemas/SessionConfig'
+        examples:
+          - type: session.update
+            session:
+              voice: af_bella
+              speed: 1.2
+              instructions: You are a friendly customer service agent.
+
+    InputAudioBufferAppend:
+      name: input_audio_buffer.append
+      title: Append Audio
+      summary: Append audio data to input buffer
+      description: |
+        Stream audio chunks to the server. Audio must be:
+        - PCM16 format (16-bit signed integers)
+        - 24kHz sample rate
+        - Mono channel
+        - Base64 encoded
+        
+        Typical chunk size: 4800 bytes (100ms of audio)
+      payload:
+        type: object
+        required:
+          - type
+          - audio
+        properties:
+          type:
+            type: string
+            const: input_audio_buffer.append
+          audio:
+            type: string
+            description: Base64-encoded audio (PCM16, 24kHz, mono)
+
+    InputAudioBufferCommit:
+      name: input_audio_buffer.commit
+      title: Commit Audio Buffer
+      summary: Commit audio buffer for processing
+      payload:
+        type: object
+        properties:
+          type:
+            type: string
+            const: input_audio_buffer.commit
+
+    InputAudioBufferClear:
+      name: input_audio_buffer.clear
+      title: Clear Audio Buffer
+      summary: Clear the input audio buffer
+      payload:
+        type: object
+        properties:
+          type:
+            type: string
+            const: input_audio_buffer.clear
+
+    ConversationItemCreate:
+      name: conversation.item.create
+      title: Create Conversation Item
+      summary: Add item to conversation
+      description: Add a text message, function call result, or other item to the conversation history
+      payload:
+        type: object
+        required:
+          - type
+          - item
+        properties:
+          type:
+            type: string
+            const: conversation.item.create
+          item:
+            $ref: '#/components/schemas/ConversationItem'
+        examples:
+          - type: conversation.item.create
+            item:
+              type: message
+              role: user
+              content:
+                - type: input_text
+                  text: What's the weather like today?
+          - type: conversation.item.create
+            item:
+              type: function_call_output
+              call_id: call_abc123
+              output: '{"temperature": 72, "condition": "sunny"}'
+
+    ResponseCreate:
+      name: response.create
+      title: Create Response
+      summary: Request assistant response
+      description: |
+        Trigger the assistant to generate a response based on the current conversation context.
+        The response will be streamed as multiple events:
+        1. response.created - Response generation started
+        2. response.output_item.added - Output item added
+        3. response.audio_transcript.delta - Transcript chunks (if audio)
+        4. response.audio.delta - Audio chunks (if audio modality)
+        5. response.text.delta - Text chunks (if text modality)
+        6. response.done - Response complete with usage stats
+      payload:
+        type: object
+        required:
+          - type
+        properties:
+          type:
+            type: string
+            const: response.create
+          response:
+            type: object
+            properties:
+              modalities:
+                type: array
+                description: Override output modalities for this response
+                items:
+                  type: string
+                  enum: [text, audio]
+        examples:
+          - type: response.create
+          - type: response.create
+            response:
+              modalities: [text, audio]
+
+    ResponseCancel:
+      name: response.cancel
+      title: Cancel Response
+      summary: Cancel in-progress response
+      payload:
+        type: object
+        properties:
+          type:
+            type: string
+            const: response.cancel
+
+    SessionCreated:
+      name: session.created
+      title: Session Created
+      summary: Session successfully created
+      description: |
+        Sent immediately after successful WebSocket connection and authentication.
+        This is always the first event received after connecting.
+      payload:
+        type: object
+        required:
+          - type
+          - session
+        properties:
+          type:
+            type: string
+            const: session.created
+          session:
+            $ref: '#/components/schemas/Session'
+        examples:
+          - type: session.created
+            session:
+              id: sess_abc123def456
+              object: realtime.session
+              status: active
+              model: ovos-voice-1
+              voice: am_onyx
+              instructions: You are a helpful assistant.
+              created_at: 1704067200
+              expires_at: 1704067800
+
+    SessionUpdated:
+      name: session.updated
+      title: Session Updated
+      summary: Session configuration updated
+      payload:
+        type: object
+        properties:
+          type:
+            type: string
+            const: session.updated
+          session:
+            $ref: '#/components/schemas/Session'
+
+    InputAudioBufferCommitted:
+      name: input_audio_buffer.committed
+      title: Audio Buffer Committed
+      payload:
+        type: object
+        properties:
+          type:
+            type: string
+            const: input_audio_buffer.committed
+          item_id:
+            type: string
+
+    InputAudioBufferCleared:
+      name: input_audio_buffer.cleared
+      title: Audio Buffer Cleared
+      payload:
+        type: object
+        properties:
+          type:
+            type: string
+            const: input_audio_buffer.cleared
+
+    InputAudioBufferSpeechStarted:
+      name: input_audio_buffer.speech_started
+      title: Speech Started
+      summary: Voice activity detected
+      payload:
+        type: object
+        properties:
+          type:
+            type: string
+            const: input_audio_buffer.speech_started
+          audio_start_ms:
+            type: integer
+          item_id:
+            type: string
+
+    InputAudioBufferSpeechStopped:
+      name: input_audio_buffer.speech_stopped
+      title: Speech Stopped
+      summary: Voice activity ended
+      payload:
+        type: object
+        properties:
+          type:
+            type: string
+            const: input_audio_buffer.speech_stopped
+          audio_end_ms:
+            type: integer
+          item_id:
+            type: string
+
+    ConversationItemCreated:
+      name: conversation.item.created
+      title: Item Created
+      payload:
+        type: object
+        properties:
+          type:
+            type: string
+            const: conversation.item.created
+          item:
+            $ref: '#/components/schemas/ConversationItem'
+
+    TranscriptionCompleted:
+      name: conversation.item.input_audio_transcription.completed
+      title: Transcription Completed
+      payload:
+        type: object
+        properties:
+          type:
+            type: string
+            const: conversation.item.input_audio_transcription.completed
+          item_id:
+            type: string
+          transcript:
+            type: string
+
+    ResponseCreated:
+      name: response.created
+      title: Response Created
+      payload:
+        type: object
+        properties:
+          type:
+            type: string
+            const: response.created
+          response:
+            $ref: '#/components/schemas/Response'
+
+    ResponseOutputItemAdded:
+      name: response.output_item.added
+      title: Output Item Added
+      summary: New output item added to response
+      payload:
+        type: object
+        required:
+          - type
+          - response_id
+          - output_index
+          - item
+        properties:
+          type:
+            type: string
+            const: response.output_item.added
+          response_id:
+            type: string
+            description: ID of the response this item belongs to
+          output_index:
+            type: integer
+            description: Index of this item in the response output array
+          item:
+            $ref: '#/components/schemas/ConversationItem'
+
+    ResponseAudioTranscriptDelta:
+      name: response.audio_transcript.delta
+      title: Audio Transcript Delta
+      summary: Streaming transcript of assistant audio
+      payload:
+        type: object
+        required:
+          - type
+          - response_id
+          - item_id
+          - delta
+        properties:
+          type:
+            type: string
+            const: response.audio_transcript.delta
+          response_id:
+            type: string
+          item_id:
+            type: string
+          output_index:
+            type: integer
+          content_index:
+            type: integer
+          delta:
+            type: string
+            description: Incremental transcript text
+
+    ResponseDone:
+      name: response.done
+      title: Response Done
+      summary: Response generation completed
+      payload:
+        type: object
+        required:
+          - type
+          - response
+        properties:
+          type:
+            type: string
+            const: response.done
+          response:
+            $ref: '#/components/schemas/Response'
+
+    ResponseCancelled:
+      name: response.cancelled
+      title: Response Cancelled
+      summary: Response was cancelled by client request
+      payload:
+        type: object
+        required:
+          - type
+          - response_id
+        properties:
+          type:
+            type: string
+            const: response.cancelled
+          response_id:
+            type: string
+            description: ID of the cancelled response
+
+    ResponseAudioDelta:
+      name: response.audio.delta
+      title: Audio Delta
+      summary: Streaming audio chunk
+      description: |
+        Base64-encoded PCM16 audio chunk from TTS synthesis.
+        Chunks are sent in order and should be played sequentially.
+        Audio format: PCM16, 24kHz, mono.
+      payload:
+        type: object
+        required:
+          - type
+          - response_id
+          - item_id
+          - delta
+        properties:
+          type:
+            type: string
+            const: response.audio.delta
+          response_id:
+            type: string
+            description: Response this audio belongs to
+          item_id:
+            type: string
+            description: Conversation item this audio belongs to
+          output_index:
+            type: integer
+            description: Index in response output array
+          content_index:
+            type: integer
+            description: Index in content array
+          delta:
+            type: string
+            description: Base64-encoded PCM16 audio chunk
+
+    ResponseAudioDone:
+      name: response.audio.done
+      title: Audio Done
+      payload:
+        type: object
+        properties:
+          type:
+            type: string
+            const: response.audio.done
+          response_id:
+            type: string
+          item_id:
+            type: string
+
+    ResponseTextDelta:
+      name: response.text.delta
+      title: Text Delta
+      summary: Streaming text chunk
+      payload:
+        type: object
+        properties:
+          type:
+            type: string
+            const: response.text.delta
+          response_id:
+            type: string
+          item_id:
+            type: string
+          delta:
+            type: string
+
+    ResponseTextDone:
+      name: response.text.done
+      title: Text Done
+      payload:
+        type: object
+        properties:
+          type:
+            type: string
+            const: response.text.done
+          response_id:
+            type: string
+          item_id:
+            type: string
+          text:
+            type: string
+
+    Error:
+      name: error
+      title: Error
+      summary: An error occurred during processing
+      payload:
+        type: object
+        required:
+          - type
+          - error
+        properties:
+          type:
+            type: string
+            const: error
+          error:
+            $ref: '#/components/schemas/ErrorDetail'
+        examples:
+          - type: error
+            error:
+              type: authentication_error
+              code: invalid_client_secret
+              message: Client secret invalid or expired
+          - type: error
+            error:
+              type: rate_limit_error
+              code: rate_limit_exceeded
+              message: Rate limit exceeded. Please slow down.
+          - type: error
+            error:
+              type: validation_error
+              code: invalid_json
+              message: "Invalid JSON: Expecting property name"
+
+    RateLimitsUpdated:
+      name: rate_limits.updated
+      title: Rate Limits Updated
+      summary: Current rate limit status
+      description: |
+        Sent periodically and after rate limit changes.
+        Use this to implement client-side throttling.
+      payload:
+        type: object
+        required:
+          - type
+          - rate_limits
+        properties:
+          type:
+            type: string
+            const: rate_limits.updated
+          rate_limits:
+            type: object
+            properties:
+              requests:
+                $ref: '#/components/schemas/RateLimit'
+              tokens:
+                $ref: '#/components/schemas/RateLimit'
+        examples:
+          - type: rate_limits.updated
+            rate_limits:
+              requests:
+                limit: 100
+                remaining: 95
+                reset_seconds: 45
+              tokens:
+                limit: 100000
+                remaining: 99500
+                reset_seconds: 45
+
+  schemas:
+    SessionConfig:
+      type: object
+      description: Configuration options for a realtime session
+      properties:
+        modalities:
+          type: array
+          description: Output modalities (text, audio, or both)
+          items:
+            type: string
+            enum: [text, audio]
+          default: [audio]
+        voice:
+          type: string
+          description: TTS voice ID (Kokoro voices)
+          enum: [am_onyx, af_bella, am_adam, af_sarah, am_michael]
+          default: am_onyx
+        instructions:
+          type: string
+          description: System instructions for the assistant
+          default: You are a helpful assistant.
+        input_audio_format:
+          type: string
+          description: Expected input audio format
+          enum: [pcm16, g711_ulaw, g711_alaw]
+          default: pcm16
+        output_audio_format:
+          type: string
+          description: Output audio format
+          enum: [pcm16, g711_ulaw, g711_alaw]
+          default: pcm16
+        turn_detection:
+          $ref: '#/components/schemas/TurnDetection'
+        tools:
+          type: array
+          description: Available function tools
+          items:
+            $ref: '#/components/schemas/Tool'
+        temperature:
+          type: number
+          description: LLM temperature (0.0-2.0)
+          minimum: 0
+          maximum: 2
+          default: 0.8
+        speed:
+          type: number
+          description: TTS speech speed (0.5-2.0)
+          minimum: 0.5
+          maximum: 2.0
+          default: 1.1
+
+    TurnDetection:
+      type: object
+      description: Voice activity detection configuration
+      properties:
+        type:
+          type: string
+          enum: [server_vad, none]
+          default: server_vad
+        threshold:
+          type: number
+          description: VAD sensitivity threshold (0.0-1.0)
+          minimum: 0
+          maximum: 1
+          default: 0.5
+        prefix_padding_ms:
+          type: integer
+          description: Audio to include before speech detection
+          default: 300
+        silence_duration_ms:
+          type: integer
+          description: Silence duration to end turn
+          default: 200
+
+    Session:
+      type: object
+      description: Active realtime session
+      required:
+        - id
+        - object
+      properties:
+        id:
+          type: string
+          description: Unique session identifier (sess_*)
+          pattern: ^sess_[a-f0-9]+$
+        object:
+          type: string
+          const: realtime.session
+        status:
+          type: string
+          enum: [active, closed]
+          default: active
+        model:
+          type: string
+          description: Model identifier
+          default: ovos-voice-1
+        modalities:
+          type: array
+          items:
+            type: string
+        voice:
+          type: string
+        instructions:
+          type: string
+        input_audio_format:
+          type: string
+        output_audio_format:
+          type: string
+        turn_detection:
+          $ref: '#/components/schemas/TurnDetection'
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tool'
+        temperature:
+          type: number
+        created_at:
+          type: integer
+          description: Unix timestamp of session creation
+        expires_at:
+          type: integer
+          description: Unix timestamp when session expires
+
+    ConversationItem:
+      type: object
+      description: A single item in the conversation history
+      required:
+        - id
+        - type
+        - role
+      properties:
+        id:
+          type: string
+          description: Unique item identifier (item_*)
+          pattern: ^item_[a-f0-9]+$
+        object:
+          type: string
+          const: realtime.item
+        type:
+          type: string
+          enum: [message, function_call, function_call_output]
+        status:
+          type: string
+          enum: [in_progress, completed, cancelled]
+        role:
+          type: string
+          enum: [user, assistant, system]
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContentPart'
+        call_id:
+          type: string
+          description: Function call ID (for function_call type)
+        name:
+          type: string
+          description: Function name (for function_call type)
+        arguments:
+          type: string
+          description: JSON-encoded function arguments
+
+    ContentPart:
+      type: object
+      description: A content part within a conversation item
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum: [input_text, input_audio, output_text, text, audio]
+        text:
+          type: string
+          description: Text content
+        audio:
+          type: string
+          description: Base64-encoded audio data
+        transcript:
+          type: string
+          description: Transcript of audio content
+
+    Response:
+      type: object
+      description: An assistant response
+      required:
+        - id
+        - object
+        - status
+      properties:
+        id:
+          type: string
+          description: Unique response identifier (resp_*)
+          pattern: ^resp_[a-f0-9]+$
+        object:
+          type: string
+          const: realtime.response
+        status:
+          type: string
+          enum: [in_progress, completed, cancelled, failed]
+        output:
+          type: array
+          description: Output items generated in this response
+          items:
+            $ref: '#/components/schemas/ConversationItem'
+        usage:
+          $ref: '#/components/schemas/Usage'
+
+    Usage:
+      type: object
+      description: Token usage statistics
+      properties:
+        total_tokens:
+          type: integer
+          description: Total tokens consumed
+        input_tokens:
+          type: integer
+          description: Input/prompt tokens
+        output_tokens:
+          type: integer
+          description: Output/completion tokens
+
+    Tool:
+      type: object
+      description: A function tool available to the assistant
+      required:
+        - type
+        - name
+      properties:
+        type:
+          type: string
+          const: function
+        name:
+          type: string
+          description: Function name (alphanumeric and underscores)
+          pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
+        description:
+          type: string
+          description: Human-readable description of the function
+        parameters:
+          type: object
+          description: JSON Schema for function parameters
+
+    RateLimit:
+      type: object
+      description: Rate limit status for a specific dimension
+      properties:
+        limit:
+          type: integer
+          description: Maximum allowed per window
+        remaining:
+          type: integer
+          description: Remaining quota in current window
+        reset_seconds:
+          type: number
+          description: Seconds until window resets
+
+    ErrorDetail:
+      type: object
+      description: Error information
+      required:
+        - type
+        - code
+        - message
+      properties:
+        type:
+          type: string
+          description: Error category
+          enum:
+            - invalid_request_error
+            - authentication_error
+            - permission_error
+            - not_found_error
+            - rate_limit_error
+            - api_error
+            - overloaded_error
+            - timeout_error
+            - validation_error
+            - processing_error
+            - policy_error
+        code:
+          type: string
+          description: Specific error code
+        message:
+          type: string
+          description: Human-readable error message
+        param:
+          type: string
+          description: Parameter that caused the error
+        event_id:
+          type: string
+          description: Event ID for correlation

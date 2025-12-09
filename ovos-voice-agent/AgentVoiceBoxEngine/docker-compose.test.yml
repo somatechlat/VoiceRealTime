@@ -1,0 +1,130 @@
+version: '3.8'
+
+# Test Infrastructure for Integration Tests
+# Run: docker compose -f docker-compose.test.yml up -d
+# Then: pytest tests/integration/ -v
+
+services:
+  # ==========================================================================
+  # CORE INFRASTRUCTURE
+  # ==========================================================================
+  
+  redis:
+    image: redis:7.2-alpine
+    container_name: avb-test-redis
+    ports:
+      - "16379:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy volatile-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - redis-test-data:/data
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: avb-test-postgres
+    ports:
+      - "15432:5432"
+    environment:
+      POSTGRES_USER: agentvoicebox
+      POSTGRES_PASSWORD: agentvoicebox_secure_pwd_2024
+      POSTGRES_DB: agentvoicebox
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentvoicebox"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - postgres-test-data:/var/lib/postgresql/data
+
+  # ==========================================================================
+  # IDENTITY - Keycloak
+  # ==========================================================================
+  
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: avb-test-keycloak
+    ports:
+      - "18080:8080"
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/agentvoicebox
+      KC_DB_USERNAME: agentvoicebox
+      KC_DB_PASSWORD: agentvoicebox_secure_pwd_2024
+    command: start-dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  # ==========================================================================
+  # GATEWAY SERVICE
+  # ==========================================================================
+  
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: avb-test-gateway
+    ports:
+      - "25000:25000"
+    environment:
+      FLASK_ENV: testing
+      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgresql://agentvoicebox:agentvoicebox_secure_pwd_2024@postgres:5432/agentvoicebox
+      KEYCLOAK_SERVER_URL: http://keycloak:8080
+      KEYCLOAK_REALM: agentvoicebox
+      LOG_LEVEL: DEBUG
+      RATE_LIMIT_REQUESTS_PER_MINUTE: 100
+      RATE_LIMIT_TOKENS_PER_MINUTE: 100000
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:25000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================================================
+  # PORTAL API
+  # ==========================================================================
+  
+  portal:
+    build:
+      context: .
+      dockerfile: Dockerfile.portal
+    container_name: avb-test-portal
+    ports:
+      - "28000:8000"
+    environment:
+      DATABASE_URL: postgresql://agentvoicebox:agentvoicebox_secure_pwd_2024@postgres:5432/agentvoicebox
+      REDIS_URL: redis://redis:6379/0
+      KEYCLOAK_SERVER_URL: http://keycloak:8080
+      KEYCLOAK_REALM: agentvoicebox
+      LAGO_API_URL: http://lago-api:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+
+volumes:
+  redis-test-data:
+  postgres-test-data:
+
+networks:
+  default:
+    name: avb-test-network

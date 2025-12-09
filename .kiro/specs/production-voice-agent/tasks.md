@@ -403,15 +403,15 @@ This implementation plan transforms the existing prototype into a production-rea
   - [x] 30.3 Full speech-to-speech pipeline test
   - [x] 30.4 Load test with Locust (100 concurrent connections)
 
-- [-] 31. Documentation
+- [x] 31. Documentation
   - [x] 31.1 Local development guide (Docker Compose setup)
     - _Requirements: 18.1, 18.4_
 
   - [x] 31.2 OpenAPI 3.1 spec for REST endpoints
     - _Requirements: 18.1_
 
-  - [ ] 31.3 AsyncAPI spec for WebSocket events
+  - [x] 31.3 AsyncAPI spec for WebSocket events
     - _Requirements: 18.2_
 
-- [ ] 32. Final Checkpoint - Production Ready
+- [x] 32. Final Checkpoint - Production Ready
   - Ensure all tests pass, ask the user if questions arise.

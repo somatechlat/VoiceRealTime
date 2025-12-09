@@ -43,6 +43,8 @@ if ASYNCPG_AVAILABLE:
         os.path.join(_app_root, "app", "services", "async_database.py")
     )
     _async_db_module = importlib.util.module_from_spec(_spec)
+    # Register module in sys.modules BEFORE exec to fix Python 3.12 dataclass issue
+    sys.modules["async_database"] = _async_db_module
     _spec.loader.exec_module(_async_db_module)
     
     AsyncDatabaseClient = _async_db_module.AsyncDatabaseClient

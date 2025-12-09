@@ -1,0 +1,423 @@
+openapi: 3.1.0
+info:
+  title: AgentVoiceBox API
+  description: |
+    OpenAI Realtime API-compatible voice processing platform.
+    Provides speech-to-speech capabilities with multi-tenant support.
+  version: 1.0.0
+  contact:
+    name: AgentVoiceBox Support
+    email: support@agentvoicebox.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:25000
+    description: Local development
+  - url: https://api.agentvoicebox.com
+    description: Production
+
+security:
+  - BearerAuth: []
+  - ApiKeyAuth: []
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Realtime
+    description: Real-time voice session management
+  - name: Audio
+    description: Audio processing endpoints
+  - name: TTS
+    description: Text-to-speech endpoints
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: Returns service health status
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /ready:
+    get:
+      tags: [Health]
+      summary: Readiness check
+      description: Returns service readiness including dependencies
+      security: []
+      responses:
+        '200':
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadyResponse'
+        '503':
+          description: Service not ready
+
+  /metrics:
+    get:
+      tags: [Health]
+      summary: Prometheus metrics
+      description: Returns Prometheus-formatted metrics
+      security: []
+      responses:
+        '200':
+          description: Metrics in Prometheus format
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /v1/realtime/sessions:
+    post:
+      tags: [Realtime]
+      summary: Create session
+      description: Create a new realtime voice session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+      responses:
+        '201':
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/realtime/sessions/{session_id}:
+    get:
+      tags: [Realtime]
+      summary: Get session
+      description: Retrieve session details
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: Session details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Realtime]
+      summary: Delete session
+      description: Close and delete a session
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '204':
+          description: Session deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/audio/transcriptions:
+    post:
+      tags: [Audio]
+      summary: Transcribe audio
+      description: Convert audio to text using STT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TranscriptionRequest'
+      responses:
+        '200':
+          description: Transcription result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranscriptionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/audio/speech:
+    post:
+      tags: [Audio]
+      summary: Generate speech
+      description: Convert text to speech using TTS
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SpeechRequest'
+      responses:
+        '200':
+          description: Audio data
+          content:
+            audio/wav:
+              schema:
+                type: string
+                format: binary
+            audio/mp3:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/tts/voices:
+    get:
+      tags: [TTS]
+      summary: List voices
+      description: Get available TTS voices
+      security: []
+      responses:
+        '200':
+          description: List of voices
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoicesResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: 'Format: Bearer {api_key}'
+
+  parameters:
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Session identifier
+
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+
+    ReadyResponse:
+      type: object
+      properties:
+        ready:
+          type: boolean
+        services:
+          type: object
+          additionalProperties:
+            type: string
+
+    CreateSessionRequest:
+      type: object
+      properties:
+        model:
+          type: string
+          default: ovos-voice-1
+        voice:
+          type: string
+          default: am_onyx
+        instructions:
+          type: string
+          default: You are a helpful assistant.
+        temperature:
+          type: number
+          minimum: 0
+          maximum: 2
+          default: 0.8
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tool'
+
+    SessionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        object:
+          type: string
+          default: realtime.session
+        model:
+          type: string
+        voice:
+          type: string
+        instructions:
+          type: string
+        created_at:
+          type: integer
+        expires_at:
+          type: integer
+        client_secret:
+          type: object
+          properties:
+            value:
+              type: string
+            expires_at:
+              type: integer
+
+    TranscriptionRequest:
+      type: object
+      required: [audio]
+      properties:
+        audio:
+          type: string
+          format: byte
+          description: Base64-encoded audio
+        model:
+          type: string
+          default: whisper-1
+        language:
+          type: string
+          default: en
+
+    TranscriptionResponse:
+      type: object
+      properties:
+        text:
+          type: string
+        language:
+          type: string
+        confidence:
+          type: number
+
+    SpeechRequest:
+      type: object
+      required: [input]
+      properties:
+        input:
+          type: string
+          maxLength: 4096
+        voice:
+          type: string
+          default: am_onyx
+        model:
+          type: string
+          default: kokoro-1
+        speed:
+          type: number
+          minimum: 0.5
+          maximum: 2.0
+          default: 1.0
+        response_format:
+          type: string
+          enum: [wav, mp3, pcm]
+          default: wav
+
+    VoicesResponse:
+      type: object
+      properties:
+        voices:
+          type: array
+          items:
+            $ref: '#/components/schemas/Voice'
+
+    Voice:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        gender:
+          type: string
+          enum: [male, female]
+        language:
+          type: string
+        preview_url:
+          type: string
+
+    Tool:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [function]
+        function:
+          type: object
+          properties:
+            name:
+              type: string
+            description:
+              type: string
+            parameters:
+              type: object
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            type:
+              type: string
+            code:
+              type: string
+            message:
+              type: string
+            param:
+              type: string
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds until rate limit resets
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
