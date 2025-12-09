@@ -867,11 +867,24 @@ Production deployment uses Kubernetes (see `k8s/` directory).
 # - LLM Worker: 1GB (API calls only)
 # - Redis: 2GB
 # - PostgreSQL: 1GB
-# - Prometheus: 512MB
-# - Grafana: 512MB
+# -----------------------
+# Total: ~10GB (LOCAL DEVELOPMENT CONSTRAINT)
+#
+# IMPORTANT: Local development cluster MUST NOT exceed 10GB RAM total.
+# This is a hard constraint for developer machines.
+#
+# Service Allocation (10GB Budget):
+# - Gateway: 512MB
+# - STT Worker: 2.5GB (Whisper tiny/base model)
+# - TTS Worker: 2GB (Kokoro ONNX)
+# - LLM Worker: 512MB (API calls only, no local models)
+# - Redis: 1GB
+# - PostgreSQL: 512MB
+# - Prometheus: 256MB
+# - Grafana: 256MB
 # - Reserved/Buffer: 2GB
 # -----------------------
-# Total: ~15GB
+# Total: ~10GB
 
 version: "3.9"
 

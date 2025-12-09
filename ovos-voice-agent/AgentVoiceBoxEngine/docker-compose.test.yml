@@ -1,0 +1,419 @@
+# Docker Compose for Real Integration Tests - PRODUCTION-TUNED
+# NO MOCKS - All services are real, production-grade configurations
+# Run: docker compose -f docker-compose.test.yml up -d
+# Test: pytest tests/integration/ -v
+#
+# CONSTRAINT: Total RAM budget is 10GB (local development machine limit)
+#
+# Service Allocation (Production-tuned within 10GB):
+# - Redis: 512MB (AOF persistence, LRU eviction)
+# - PostgreSQL: 512MB (WAL, checksums, connection pooling)
+# - Gateway x2: 512MB each (1GB total)
+# - STT Worker: 2.5GB (Whisper tiny model, int8 quantization)
+# - TTS Worker: 2GB (Kokoro ONNX, streaming)
+# - LLM Worker: 512MB (API-only, circuit breaker)
+# - Buffer: 3GB
+# -----------------------
+# Total: ~10GB
+#
+# All volumes use local driver with production-grade persistence
+# All containers have restart policies, health checks, and resource limits
+#
+# Requirements: 17.6 - Local development using Docker Compose with all dependencies
+
+version: "3.9"
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 10s
+  timeout: 5s
+  retries: 5
+  start_period: 30s
+
+services:
+  # =============================================================================
+  # REDIS - Distributed State Store
+  # Production: AOF persistence, memory limits, LRU eviction
+  # Requirements: 9.1, 9.2, 9.3, 9.6
+  # =============================================================================
+  redis:
+    image: redis:7-alpine
+    hostname: redis
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 400mb
+      --maxmemory-policy volatile-lru
+      --tcp-keepalive 300
+      --timeout 0
+      --tcp-backlog 511
+      --loglevel notice
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+      --stop-writes-on-bgsave-error yes
+      --rdbcompression yes
+      --rdbchecksum yes
+    ports:
+      - "16379:6379"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+        reservations:
+          memory: 256M
+          cpus: "0.25"
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+    logging: *default-logging
+    restart: unless-stopped
+    networks:
+      - test-network
+    volumes:
+      - type: volume
+        source: redis-data
+        target: /data
+        volume:
+          nocopy: true
+
+
+  # =============================================================================
+  # POSTGRESQL - Primary Database
+  # Production: WAL, checksums, connection pooling, PITR-ready
+  # Requirements: 13.1, 13.2, 13.5
+  # =============================================================================
+  postgres:
+    image: postgres:16-alpine
+    hostname: postgres
+    environment:
+      POSTGRES_USER: agentvoicebox
+      POSTGRES_PASSWORD: agentvoicebox_secure_pwd_2024
+      POSTGRES_DB: agentvoicebox
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+      PGDATA: /var/lib/postgresql/data/pgdata
+    command: >
+      postgres
+      -c shared_buffers=128MB
+      -c effective_cache_size=256MB
+      -c maintenance_work_mem=64MB
+      -c work_mem=4MB
+      -c max_connections=100
+      -c max_wal_size=256MB
+      -c min_wal_size=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=8MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c log_min_duration_statement=1000
+      -c log_checkpoints=on
+      -c log_connections=on
+      -c log_disconnections=on
+      -c log_lock_waits=on
+      -c log_temp_files=0
+      -c idle_in_transaction_session_timeout=60000
+      -c statement_timeout=30000
+    ports:
+      - "15432:5432"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+        reservations:
+          memory: 256M
+          cpus: "0.25"
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "pg_isready -U agentvoicebox -d agentvoicebox"]
+      interval: 5s
+      timeout: 3s
+    logging: *default-logging
+    restart: unless-stopped
+    networks:
+      - test-network
+    volumes:
+      - type: volume
+        source: postgres-data
+        target: /var/lib/postgresql/data
+        volume:
+          nocopy: true
+
+
+  # =============================================================================
+  # GATEWAY 1 - WebSocket Termination & API
+  # Production: Graceful shutdown, connection draining, health checks
+  # Requirements: 7.1, 7.2, 7.4, 7.6
+  # =============================================================================
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    hostname: gateway-1
+    environment:
+      FLASK_ENV: production
+      REDIS_URL: redis://redis:6379/0
+      DATABASE_URI: postgresql://agentvoicebox:agentvoicebox_secure_pwd_2024@postgres:5432/agentvoicebox
+      GATEWAY_ID: gateway-prod-1
+      LOG_LEVEL: INFO
+      LOG_FORMAT: json
+      SECRET_KEY: ${SECRET_KEY:-production-secret-key-change-in-prod}
+      WORKERS: 2
+      WORKER_CONNECTIONS: 1000
+      GRACEFUL_TIMEOUT: 30
+      KEEPALIVE: 5
+    ports:
+      - "18000:8000"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+        reservations:
+          memory: 256M
+          cpus: "0.25"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+    logging: *default-logging
+    restart: unless-stopped
+    stop_grace_period: 30s
+    networks:
+      - test-network
+
+  # =============================================================================
+  # GATEWAY 2 - Second instance for distributed session tests
+  # Production: Same config as Gateway 1
+  # =============================================================================
+  gateway-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    hostname: gateway-2
+    environment:
+      FLASK_ENV: production
+      REDIS_URL: redis://redis:6379/0
+      DATABASE_URI: postgresql://agentvoicebox:agentvoicebox_secure_pwd_2024@postgres:5432/agentvoicebox
+      GATEWAY_ID: gateway-prod-2
+      LOG_LEVEL: INFO
+      LOG_FORMAT: json
+      SECRET_KEY: ${SECRET_KEY:-production-secret-key-change-in-prod}
+      WORKERS: 2
+      WORKER_CONNECTIONS: 1000
+      GRACEFUL_TIMEOUT: 30
+      KEEPALIVE: 5
+    ports:
+      - "18001:8000"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+        reservations:
+          memory: 256M
+          cpus: "0.25"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+    logging: *default-logging
+    restart: unless-stopped
+    stop_grace_period: 30s
+    networks:
+      - test-network
+
+
+  # =============================================================================
+  # STT WORKER - Speech-to-Text Processing
+  # Production: Whisper tiny model (RAM optimized), int8 quantization
+  # Requirements: 10.1, 10.2
+  # =============================================================================
+  stt-worker:
+    build:
+      context: .
+      dockerfile: workers/Dockerfile.stt
+    hostname: stt-worker-1
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      WHISPER_MODEL: tiny
+      WHISPER_DEVICE: cpu
+      WHISPER_COMPUTE_TYPE: int8
+      WORKER_ID: stt-worker-prod-1
+      CONSUMER_GROUP: stt-workers
+      BATCH_SIZE: 4
+      LOG_LEVEL: INFO
+      LOG_FORMAT: json
+    deploy:
+      resources:
+        limits:
+          memory: 2560M
+          cpus: "2.0"
+        reservations:
+          memory: 1G
+          cpus: "0.5"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "python", "-c", "import redis; r=redis.from_url('redis://redis:6379/0'); r.ping()"]
+      interval: 15s
+    logging: *default-logging
+    restart: unless-stopped
+    networks:
+      - test-network
+    volumes:
+      - type: volume
+        source: whisper-cache
+        target: /root/.cache/whisper
+        volume:
+          nocopy: true
+
+  # =============================================================================
+  # TTS WORKER - Text-to-Speech Synthesis
+  # Production: Kokoro ONNX, streaming output, cancellation support
+  # Requirements: 11.1, 11.2
+  # =============================================================================
+  tts-worker:
+    build:
+      context: .
+      dockerfile: workers/Dockerfile.tts
+    hostname: tts-worker-1
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      TTS_ENGINE: kokoro
+      KOKORO_MODEL_DIR: /models/kokoro
+      WORKER_ID: tts-worker-prod-1
+      CONSUMER_GROUP: tts-workers
+      CHUNK_SIZE: 4096
+      LOG_LEVEL: INFO
+      LOG_FORMAT: json
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+        reservations:
+          memory: 1G
+          cpus: "0.5"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "python", "-c", "import redis; r=redis.from_url('redis://redis:6379/0'); r.ping()"]
+      interval: 15s
+    logging: *default-logging
+    restart: unless-stopped
+    networks:
+      - test-network
+    volumes:
+      - type: volume
+        source: kokoro-models
+        target: /models/kokoro
+        volume:
+          nocopy: true
+      - type: volume
+        source: tts-cache
+        target: /app/cache
+        volume:
+          nocopy: true
+
+
+  # =============================================================================
+  # LLM WORKER - Language Model Integration
+  # Production: API-only (no local models), circuit breaker, failover
+  # Requirements: 12.1, 12.2
+  # =============================================================================
+  llm-worker:
+    build:
+      context: .
+      dockerfile: workers/Dockerfile.llm
+    hostname: llm-worker-1
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_API_BASE: ${OPENAI_API_BASE:-https://api.openai.com/v1}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      WORKER_ID: llm-worker-prod-1
+      CONSUMER_GROUP: llm-workers
+      CIRCUIT_BREAKER_THRESHOLD: 5
+      CIRCUIT_BREAKER_TIMEOUT: 30
+      REQUEST_TIMEOUT: 30
+      LOG_LEVEL: INFO
+      LOG_FORMAT: json
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+        reservations:
+          memory: 256M
+          cpus: "0.25"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "python", "-c", "import redis; r=redis.from_url('redis://redis:6379/0'); r.ping()"]
+      interval: 15s
+    logging: *default-logging
+    restart: unless-stopped
+    networks:
+      - test-network
+
+# =============================================================================
+# NETWORKS - Isolated bridge network for service communication
+# =============================================================================
+networks:
+  test-network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.0.0/16
+
+# =============================================================================
+# VOLUMES - Persistent storage with Docker-managed volumes
+# Production-grade with automatic data persistence
+# =============================================================================
+volumes:
+  # Redis AOF and RDB persistence
+  redis-data:
+    driver: local
+
+  # PostgreSQL data directory with WAL
+  postgres-data:
+    driver: local
+
+  # Whisper model cache (downloaded on first run)
+  whisper-cache:
+    driver: local
+
+  # Kokoro TTS models
+  kokoro-models:
+    driver: local
+
+  # TTS synthesis cache
+  tts-cache:
+    driver: local

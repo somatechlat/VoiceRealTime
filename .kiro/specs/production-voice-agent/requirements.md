@@ -331,6 +331,8 @@ The system is designed as a **true SaaS offering** with:
 |-------|-----------|------------|-----------------|
 | **Load Balancer** | L4/L7 LB | HAProxy 2.9 | WebSocket-native, 2M+ conn/instance, battle-tested |
 | **API Gateway** | Rate limiting, Auth | Kong / Envoy | Plugin ecosystem, observability, proven at scale |
+| **Identity/IAM** | Users, Roles, SSO | Keycloak 24 | Enterprise SSO, SAML/OIDC, RBAC, 10M+ deployments |
+| **Billing** | Usage-based billing | Lago | Metering, Stripe/PayPal, invoices, refunds, AGPL-3.0 |
 | **Message Bus** | Async messaging | NATS JetStream | 10M+ msg/sec, simpler than Kafka, built-in persistence |
 | **Session Store** | Distributed state | Redis Cluster 7.2 | Sub-ms latency, Pub/Sub, Streams, proven at scale |
 | **Primary Database** | Relational data | PostgreSQL 16 | JSONB, partitioning, logical replication |
@@ -493,4 +495,119 @@ UsageRecord
 | TTS Time-to-First-Byte (p99) | < 200ms | Request to first audio chunk |
 | API Latency (p99) | < 100ms | REST endpoints |
 | Error Rate | < 0.1% | 5xx responses |
+
+---
+
+## SaaS Platform Requirements
+
+### Requirement 19: Identity & Access Management (Keycloak)
+
+**User Story:** As a SaaS operator, I want enterprise-grade identity management, so that tenants can manage users, roles, and SSO integration.
+
+#### Acceptance Criteria
+
+1. THE system SHALL use Keycloak as the identity provider for all user authentication and authorization
+2. WHEN a tenant is created THEN the system SHALL provision a Keycloak realm with default roles (admin, developer, viewer)
+3. THE system SHALL support authentication methods: username/password, social login (Google, GitHub), SAML 2.0, OIDC
+4. WHEN a user logs in THEN the system SHALL issue JWT tokens with tenant_id, user_id, roles, and permissions claims
+5. THE system SHALL provide self-service user management: registration, password reset, profile updates, MFA enrollment
+6. WHEN an enterprise tenant requires SSO THEN the system SHALL support SAML 2.0 and OIDC identity provider federation
+7. THE system SHALL enforce role-based access control (RBAC) with permissions: `api:read`, `api:write`, `billing:read`, `billing:write`, `admin:*`
+8. THE system SHALL provide admin console for tenant administrators to manage users, roles, and groups
+9. WHEN a user is deactivated THEN the system SHALL revoke all active sessions and API keys within 60 seconds
+
+---
+
+### Requirement 20: Billing & Subscription Management (Lago)
+
+**User Story:** As a SaaS operator, I want comprehensive billing management, so that I can charge tenants based on usage with multiple payment methods.
+
+#### Acceptance Criteria
+
+1. THE system SHALL use Lago as the billing engine for usage-based pricing and subscription management
+2. WHEN a tenant signs up THEN the system SHALL create a Lago customer record linked to tenant_id
+3. THE system SHALL support pricing models: usage-based (per API call, per minute), subscription tiers (Free, Pro, Enterprise), hybrid (base + overage)
+4. THE system SHALL meter usage dimensions: `api_requests`, `audio_minutes_input`, `audio_minutes_output`, `llm_tokens`, `concurrent_connections`
+5. WHEN usage events occur THEN the system SHALL send metering data to Lago within 60 seconds (async, non-blocking)
+6. THE system SHALL integrate payment processors: Stripe (credit cards, ACH), PayPal (PayPal balance, cards)
+7. WHEN a billing period ends THEN the system SHALL generate invoices automatically and send to customer email
+8. THE system SHALL support billing operations: refunds (full/partial), credits, proration, dunning (failed payment retry)
+9. WHEN payment fails THEN the system SHALL retry 3 times over 7 days, then suspend tenant with 48-hour grace period
+10. THE system SHALL provide webhook events: `invoice.created`, `invoice.paid`, `invoice.failed`, `subscription.updated`, `payment.refunded`
+
+---
+
+### Requirement 21: Customer Self-Service Portal
+
+**User Story:** As a tenant administrator, I want a self-service portal, so that I can manage my account, view usage, and handle billing without contacting support.
+
+#### Acceptance Criteria
+
+1. THE system SHALL provide a web-based customer portal accessible at `portal.agentvoicebox.com`
+2. WHEN a user logs in THEN the portal SHALL authenticate via Keycloak and display tenant-specific data
+3. THE portal SHALL display dashboard with: current usage, billing summary, API health status, recent activity
+4. THE portal SHALL provide API key management: create, rotate, revoke, set permissions, view usage per key
+5. THE portal SHALL display usage analytics: charts for API calls, audio minutes, tokens over time (hourly/daily/monthly)
+6. THE portal SHALL provide billing section: current plan, usage breakdown, invoice history, payment methods, upgrade/downgrade
+7. WHEN viewing invoices THEN the portal SHALL allow download as PDF and display line-item breakdown
+8. THE portal SHALL provide settings: organization profile, notification preferences, webhook configuration, team members
+9. THE portal SHALL support team management: invite users, assign roles, remove users, transfer ownership
+10. THE portal SHALL be responsive (mobile-friendly) and accessible (WCAG 2.1 AA compliant)
+
+---
+
+### Requirement 22: Payment Processing Integration
+
+**User Story:** As a tenant, I want to pay using my preferred payment method, so that I can easily manage my subscription.
+
+#### Acceptance Criteria
+
+1. THE system SHALL integrate Stripe for credit/debit card payments with PCI DSS compliance (via Stripe Elements)
+2. THE system SHALL integrate PayPal for PayPal balance and alternative card payments
+3. WHEN a customer adds a payment method THEN the system SHALL tokenize and store securely (no raw card data stored)
+4. THE system SHALL support automatic recurring payments on billing cycle (monthly/annual)
+5. WHEN a payment is processed THEN the system SHALL send confirmation email with receipt
+6. THE system SHALL support manual payments: pay now, pay invoice, add credits
+7. WHEN a refund is requested THEN the system SHALL process via original payment method within 5-10 business days
+8. THE system SHALL display payment history with status: pending, completed, failed, refunded
+9. THE system SHALL support multiple currencies: USD, EUR, GBP with automatic conversion
+10. WHEN tax is applicable THEN the system SHALL calculate and display tax based on customer location (VAT, sales tax)
+
+---
+
+### Requirement 23: Subscription & Plan Management
+
+**User Story:** As a SaaS operator, I want flexible subscription plans, so that I can offer different tiers to different customer segments.
+
+#### Acceptance Criteria
+
+1. THE system SHALL support subscription tiers:
+   - **Free**: 100 API calls/month, 10 audio minutes, community support
+   - **Pro**: 10,000 API calls/month, 1,000 audio minutes, email support, $49/month
+   - **Enterprise**: Unlimited API calls, unlimited audio, dedicated support, custom pricing
+2. WHEN a tenant upgrades THEN the system SHALL apply new limits immediately and prorate billing
+3. WHEN a tenant downgrades THEN the system SHALL apply at end of current billing period
+4. THE system SHALL support add-ons: additional API calls, additional audio minutes, priority support
+5. WHEN usage exceeds plan limits THEN the system SHALL either throttle (Free) or charge overage (Pro/Enterprise)
+6. THE system SHALL support annual billing with discount (2 months free)
+7. WHEN a tenant cancels THEN the system SHALL retain access until end of paid period and offer win-back
+8. THE system SHALL support trial periods: 14-day free trial of Pro features for new signups
+9. WHEN trial expires THEN the system SHALL downgrade to Free tier unless payment method added
+
+---
+
+### Requirement 24: Tenant Onboarding Flow
+
+**User Story:** As a new customer, I want a smooth onboarding experience, so that I can start using the API quickly.
+
+#### Acceptance Criteria
+
+1. WHEN a user signs up THEN the system SHALL create: Keycloak user, Keycloak realm (tenant), Lago customer, default project, first API key
+2. THE onboarding flow SHALL collect: email, password, organization name, use case (optional)
+3. WHEN signup completes THEN the system SHALL send welcome email with: API key, quickstart guide link, support contact
+4. THE system SHALL provide interactive quickstart: test API call, view response, see usage update
+5. WHEN first API call succeeds THEN the system SHALL display success celebration and next steps
+6. THE system SHALL offer optional guided tour of portal features
+7. WHEN a tenant is inactive for 7 days THEN the system SHALL send engagement email with tips
+8. THE system SHALL track onboarding completion: signup → first API call → first successful response → payment method added
 

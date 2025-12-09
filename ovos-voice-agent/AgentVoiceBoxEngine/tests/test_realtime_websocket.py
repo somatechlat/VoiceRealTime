@@ -18,7 +18,7 @@ class DummyWebSocket:
     def send(self, data: str) -> None:
         self.sent.append(data)
 
-    def receive(self):
+    def receive(self, timeout: float = None):
         if self._messages:
             return self._messages.pop(0)
         raise ConnectionClosed(1000, "closed")

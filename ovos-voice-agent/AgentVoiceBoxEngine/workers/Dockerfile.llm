@@ -1,0 +1,51 @@
+# LLM Worker Dockerfile
+# Multi-provider LLM inference (OpenAI, Groq, Ollama)
+#
+# Build: docker build -f workers/Dockerfile.llm -t agentvoicebox/llm-worker .
+# Run: docker run -e REDIS_URL=redis://host:6379/0 -e GROQ_API_KEY=xxx agentvoicebox/llm-worker
+#
+# Memory limit: 2GB (set via docker run --memory=2g or Kubernetes resources)
+
+FROM python:3.11-slim AS base
+
+# Create non-root user for security
+RUN useradd -m -u 1000 worker
+WORKDIR /app
+
+# Create virtual environment
+RUN python -m venv /app/venv
+ENV PATH="/app/venv/bin:$PATH"
+
+# Install Python dependencies
+COPY workers/requirements-llm.txt /app/
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements-llm.txt
+
+# Copy application code
+COPY app/ /app/app/
+COPY workers/ /app/workers/
+
+# Set ownership
+RUN chown -R worker:worker /app
+
+# Switch to non-root user
+USER worker
+
+# Environment variables with defaults
+ENV REDIS_URL=redis://localhost:6379/0 \
+    LLM_DEFAULT_PROVIDER=groq \
+    LLM_DEFAULT_MODEL=llama-3.1-70b-versatile \
+    LLM_MAX_TOKENS=1024 \
+    LLM_TEMPERATURE=0.7 \
+    CIRCUIT_BREAKER_THRESHOLD=5 \
+    CIRCUIT_BREAKER_TIMEOUT=30 \
+    OLLAMA_BASE_URL=http://localhost:11434 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD python -c "from workers.llm_worker import LLMWorker; print('OK')" || exit 1
+
+# Run the LLM worker
+CMD ["python", "-m", "workers.llm_worker"]

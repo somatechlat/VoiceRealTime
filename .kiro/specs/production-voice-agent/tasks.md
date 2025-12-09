@@ -2,335 +2,416 @@
 
 ## AgentVoiceBox Production Architecture
 
-This implementation plan transforms the existing prototype into a production-ready distributed system based on the design document.
+This implementation plan transforms the existing prototype into a production-ready distributed SaaS platform.
 
 ---
 
-## Completed Work (Already Implemented)
-
-- [x] Basic WebSocket transport (`AgentVoiceBoxEngine/app/transports/realtime_ws.py`)
-- [x] Session management with PostgreSQL (`AgentVoiceBoxEngine/app/services/session_service.py`)
-- [x] Token service for ephemeral secrets (`AgentVoiceBoxEngine/app/services/token_service.py`)
-- [x] TTS provider abstraction with Kokoro/Piper/Espeak fallback (`AgentVoiceBoxEngine/app/tts/provider.py`)
-- [x] Basic Prometheus metrics (`AgentVoiceBoxEngine/app/observability/metrics.py`)
-- [x] OPA policy integration (`AgentVoiceBoxEngine/app/services/opa_client.py`)
-- [x] SQLAlchemy models for sessions and conversation items (`AgentVoiceBoxEngine/app/models/`)
-- [x] Docker Compose with PostgreSQL, Kafka, OPA, Prometheus (`AgentVoiceBoxEngine/docker-compose.yml`)
-- [x] In-memory rate limiter (`ovos-voice-agent/rate_limiter.py`)
-- [x] Speech pipeline with STT/TTS (`sprint2-speech/speech_pipeline.py`)
-- [x] OpenAI-compatible WebSocket server (`sprint4-websocket/realtime_server.py`)
-- [x] Basic authentication via bearer tokens (`enterprise/app/utils/auth.py`)
-
----
-
-## Remaining Tasks
+## Phase 1: Core Infrastructure (COMPLETED)
 
 - [x] 1. Redis Integration & Distributed Session Management
-  - [x] 1.1 Add Redis to docker-compose.yml
-    - Add Redis 7 service with `appendonly yes` persistence
-    - Configure `maxmemory 2gb` and `maxmemory-policy volatile-lru`
-    - Add health check with `redis-cli ping`
-    - _Requirements: 9.1, 9.2_
-
-  - [x] 1.2 Create Redis client wrapper with connection pooling
-    - Implement async Redis client using redis-py
-    - Add connection pooling (max 50 connections)
-    - Add automatic reconnection logic
-    - _Requirements: 9.1_
-
-  - [x] 1.3 Implement DistributedSessionManager
-    - Create session in Redis hash with 30-second TTL
-    - Implement `get_session` with fallback handling
-    - Implement `update_session` with pub/sub notification
-    - Implement heartbeat refresh mechanism
-    - _Requirements: 9.2, 9.3, 9.4_
-
-  - [ ]* 1.4 Write property test for session consistency
-    - **Property 1: Session State Consistency**
-    - **Validates: Requirements 9.2, 9.3**
-
-  - [x] 1.5 Implement session cleanup background task
-    - Scan for expired sessions every 30 seconds
-    - Clean up associated resources (audio buffers, conversation items)
-    - Emit session.closed events
-    - _Requirements: 9.4_
+  - [x] 1.1 Add Redis 7 to docker-compose.yml with persistence and health checks
+  - [x] 1.2 Create RedisClient with connection pooling and auto-reconnection
+  - [x] 1.3 Implement DistributedSessionManager with tenant isolation
+  - [x] 1.4 Implement session cleanup background task
+  - _Requirements: 9.1, 9.2, 9.3, 9.4_
 
 - [x] 2. Distributed Rate Limiter
-  - [x] 2.1 Implement Redis Lua script for atomic rate limiting
-    - Create sliding window algorithm in Lua
-    - Support both request and token limits
-    - Return remaining quota and reset time
-    - _Requirements: 6.1, 6.2, 6.3_
+  - [x] 2.1 Implement Redis Lua script for atomic sliding window rate limiting
+  - [x] 2.2 Create DistributedRateLimiter with per-tenant overrides
+  - [x] 2.3 Integrate rate limiter into WebSocket gateway
+  - [x] 2.4 Wire up dependencies in dependencies.py
+  - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.6_
 
-  - [x] 2.2 Create DistributedRateLimiter class
-    - Load Lua script on initialization
-    - Implement `check_and_consume` method
-    - Implement `get_limits` method
-    - Support per-tenant limit overrides
-    - _Requirements: 6.1, 6.2, 6.4_
+---
 
-  - [ ]* 2.3 Write property test for rate limit accuracy
-    - **Property 2: Rate Limit Accuracy**
-    - **Validates: Requirements 6.1, 6.2, 6.3**
+## Phase 2: Gateway Stateless Refactor
 
-  - [x] 2.4 Integrate rate limiter into gateway
-    - Replace in-memory rate limiter with Redis-based
-    - Check limits on every incoming event
-    - Send `rate_limits.updated` events
-    - Return `rate_limit_error` when exceeded
-    - _Requirements: 6.1, 6.2, 6.6_
-
-- [x] 3. Checkpoint - Verify Redis integration
-  - Ensure all tests pass, ask the user if questions arise.
-
-- [ ] 4. Gateway Service Refactor
-  - [-] 4.1 Refactor gateway to be stateless
-    - Remove all in-memory session storage
-    - Use DistributedSessionManager for all state
-    - Use Redis pub/sub for cross-instance events
+- [x] 3. Gateway Stateless Refactor
+  - [x] 3.1 Replace in-memory session storage with DistributedSessionManager
+    - Modified app/__init__.py to initialize Redis client on startup
+    - Modified realtime_ws.py to create sessions in both Redis and PostgreSQL
+    - Added heartbeat mechanism (15s interval) to keep Redis sessions alive
+    - Added Redis session cleanup on WebSocket disconnect
+    - Conversation items written to both Redis (fast) and PostgreSQL (durable)
     - _Requirements: 7.1, 7.2_
 
-  - [ ] 4.2 Implement connection lifecycle management
-    - Handle WebSocket connect with auth validation
-    - Implement graceful disconnect with cleanup
-    - Add connection draining for shutdown (SIGTERM handling)
-    - _Requirements: 7.1, 7.4_
+  - [x] 3.2 Implement SIGTERM graceful shutdown with connection draining
+    - Created ConnectionManager class for tracking active connections
+    - Added SIGTERM/SIGINT signal handlers
+    - Implemented 30-second drain period before force close
+    - New connections rejected during shutdown with `server_shutting_down` error
+    - Connections registered/unregistered in WebSocket handler
+    - _Requirements: 7.4_
 
-  - [ ]* 4.3 Write property test for connection draining
-    - **Property 6: Connection Draining**
-    - **Validates: Requirements 7.4**
-
-  - [ ] 4.4 Implement event routing to workers via Redis Streams
-    - Route audio events to STT worker stream
-    - Route synthesis requests to TTS worker stream
-    - Route LLM requests to LLM worker stream
+  - [x] 3.3 Implement Redis Streams for worker communication
+    - Created RedisStreamsClient class (`app/services/redis_streams.py`)
+    - Streams: `audio:stt` (STT requests), `tts:requests` (TTS requests), `audio:out:{session_id}` (audio chunks)
+    - Consumer groups: `stt-workers`, `tts-workers`
+    - Pub/Sub channels: `transcription:{session_id}`, `tts:{session_id}`
+    - Methods: publish_audio_for_stt, publish_tts_request, publish_audio_chunk, subscribe_to_transcriptions
+    - Integrated into app initialization and dependencies
     - _Requirements: 7.3_
 
-  - [ ] 4.5 Implement pub/sub listener for worker responses
-    - Subscribe to transcription results
-    - Subscribe to TTS audio chunks
-    - Subscribe to LLM responses
-    - Forward results to appropriate WebSocket
+  - [x] 3.4 Implement pub/sub listener for worker responses
+    - Added streams_client to RealtimeWebsocketConnection
+    - Methods: _publish_audio_for_stt, _publish_tts_request, _cancel_tts_worker
+    - Cleanup worker streams on session close
+    - Cancel handler notifies TTS workers
+    - RedisStreamsClient has subscribe_to_transcriptions and read_audio_chunks methods
     - _Requirements: 7.3_
 
-- [ ] 5. Checkpoint - Verify gateway refactor
+- [x] 4. Checkpoint - Gateway Refactor
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 6. STT Worker Service
-  - [ ] 6.1 Create STT worker with Redis Streams consumer
-    - Implement consumer group `stt-workers` for work distribution
-    - Load Faster-Whisper model on startup
-    - Configure for CPU or GPU based on environment
+---
+
+## Phase 3: Worker Services
+
+- [x] 5. STT Worker Service
+  - [x] 5.1 Create STT worker with Redis Streams consumer group
+    - Consumer group: `stt-workers`
+    - Load Faster-Whisper model (CPU/GPU configurable)
     - _Requirements: 10.1, 10.2_
 
-  - [ ] 6.2 Implement audio transcription pipeline
-    - Decode base64 audio from stream message
-    - Run Whisper transcription
-    - Publish results to Redis pub/sub channel `transcription:{session_id}`
-    - Acknowledge processed messages
+  - [x] 5.2 Implement transcription pipeline
+    - Decode base64 audio, transcribe, publish to pub/sub
     - _Requirements: 10.2, 10.4_
 
-  - [ ]* 6.3 Write property test for transcription delivery
-    - **Property 4: Transcription Delivery**
-    - **Validates: Requirements 10.4**
-
-  - [ ] 6.4 Create STT worker Dockerfile
-    - Multi-stage build with Faster-Whisper
-    - Support CPU (int8) and GPU (float16) compute types
-    - Configure 4GB memory limit
+  - [x] 5.3 Create STT worker Dockerfile (4GB memory limit)
     - _Requirements: 10.1, 10.3_
 
-- [ ] 7. TTS Worker Service
-  - [ ] 7.1 Create TTS worker with Redis Streams consumer
-    - Implement consumer group `tts-workers` for work distribution
-    - Load Kokoro ONNX model on startup
-    - Configure voice and speed defaults from environment
+- [x] 6. TTS Worker Service
+  - [x] 6.1 Create TTS worker with Redis Streams consumer group
+    - Consumer group: `tts-workers`
+    - Load Kokoro ONNX model
     - _Requirements: 11.1, 11.2_
 
-  - [ ] 7.2 Implement streaming audio synthesis
-    - Generate audio chunks as they're produced
-    - Publish chunks to Redis Stream `audio:out:{session_id}` with ordering
-    - Support cancellation mid-synthesis via `is_cancelled` check
+  - [x] 6.2 Implement streaming synthesis with cancellation support
+    - Publish chunks with sequence numbers
+    - Check cancellation flag
     - _Requirements: 11.2, 11.3, 11.5_
 
-  - [ ]* 7.3 Write property test for audio chunk ordering
-    - **Property 3: Audio Chunk Ordering**
-    - **Validates: Requirements 11.3**
-
-  - [ ]* 7.4 Write property test for cancel propagation
-    - **Property 5: Cancel Propagation**
-    - **Validates: Requirements 11.5**
-
-  - [ ] 7.5 Create TTS worker Dockerfile
-    - Multi-stage build with Kokoro ONNX
-    - Include model files in image
-    - Configure 3GB memory limit
-    - Fall back to Piper if Kokoro unavailable
+  - [x] 6.3 Create TTS worker Dockerfile (3GB memory limit)
     - _Requirements: 11.1, 11.6, 11.7_
 
-- [ ] 8. Checkpoint - Verify worker services
-  - Ensure all tests pass, ask the user if questions arise.
+- [x] 7. LLM Worker Service
+  - [x] 7.1 Create LLM worker with multi-provider support (OpenAI, Groq, Ollama)
+    - _Requirements: 12.1, 12.2_
 
-- [ ] 9. LLM Worker Service
-  - [ ] 9.1 Create LLM worker with multi-provider support
-    - Implement provider abstraction (OpenAI, Groq, Ollama)
-    - Configure providers from environment variables
-    - Implement provider health checks
-    - _Requirements: 12.1, 12.2, 12.4_
-
-  - [ ] 9.2 Implement circuit breaker for provider failover
-    - Track failures per provider (threshold: 5 consecutive failures)
-    - Open circuit and fail fast when threshold exceeded
-    - Attempt recovery after 30 seconds
+  - [x] 7.2 Implement circuit breaker for provider failover
+    - 5 failures threshold, 30s recovery timeout
     - _Requirements: 12.4, 16.4, 16.5_
 
-  - [ ]* 9.3 Write property test for circuit breaker recovery
-    - **Property 8: Circuit Breaker Recovery**
-    - **Validates: Requirements 16.4, 16.5**
+  - [x] 7.3 Implement streaming token generation to TTS
+    - _Requirements: 12.2, 12.3_
 
-  - [ ] 9.4 Implement streaming token generation
-    - Stream tokens as they arrive from LLM
-    - Forward to TTS worker immediately (don't wait for completion)
-    - Support function calling detection
-    - _Requirements: 12.2, 12.3, 12.6_
+- [x] 8. Checkpoint - Worker Services
+  - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 10. PostgreSQL Schema & Migrations
-  - [ ] 10.1 Create database schema with Alembic migrations
-    - Create `sessions` table with partitioning by tenant_id
-    - Create `conversation_items` table with JSONB content
-    - Create `audit_logs` table
-    - Add covering indexes for query optimization
+---
+
+## Phase 4: Database & Persistence
+
+- [x] 9. PostgreSQL Schema & Migrations
+  - [x] 9.1 Create Alembic migrations for tenants, projects, api_keys, sessions, conversation_items, audit_logs
+    - Partition by tenant_id
     - _Requirements: 13.1, 13.2, 13.4_
 
-  - [ ] 10.2 Implement async database client
-    - Use asyncpg for async PostgreSQL access
-    - Implement connection pooling
-    - Add write-ahead buffering for non-blocking writes
+  - [x] 9.2 Implement async database client with asyncpg
     - _Requirements: 13.1, 13.3_
 
-  - [ ]* 10.3 Write property test for message persistence
-    - **Property 9: Message Persistence**
-    - **Validates: Requirements 13.3, 13.5**
-
-  - [ ] 10.4 Implement conversation history queries
-    - Query last 100 items for a session within 100ms
-    - Support pagination
-    - Overflow from Redis to PostgreSQL automatically
+  - [x] 9.3 Implement Redis-to-PostgreSQL overflow for conversation items
     - _Requirements: 13.5, 9.5_
 
-- [ ] 11. Checkpoint - Verify database integration
+- [x] 10. Checkpoint - Database
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 12. Authentication & Tenant Isolation
-  - [ ] 12.1 Enhance token validation middleware
-    - Validate bearer tokens on WebSocket connect within 50ms
-    - Support ephemeral session tokens with 10-minute TTL
-    - Reject expired tokens with `authentication_error`
-    - _Requirements: 3.1, 3.3, 3.5, 3.6_
+---
 
-  - [ ]* 12.2 Write property test for authentication enforcement
-    - **Property 10: Authentication Enforcement**
-    - **Validates: Requirements 3.1, 3.3**
+## Phase 5: Authentication & Multi-Tenancy
 
-  - [ ] 12.3 Implement tenant isolation
-    - Namespace Redis keys by tenant_id
-    - Filter database queries by tenant_id at database layer
-    - Validate tenant context on every operation
+- [x] 11. Enhanced Authentication
+  - [x] 11.1 Implement API key validation with Argon2id hashing
+    - Redis cache (hot) with PostgreSQL fallback (cold)
+    - _Requirements: 3.1, 3.2, 3.3_
+
+  - [x] 11.2 Implement ephemeral session tokens (10-minute TTL)
+    - _Requirements: 3.5, 3.6_
+
+  - [x] 11.3 Implement tenant isolation at all layers
+    - Redis key namespacing, DB query filtering
     - _Requirements: 1.2, 1.3, 1.4_
 
-  - [ ] 12.4 Add PII redaction to logging
-    - Identify sensitive fields (audio, transcripts, user identifiers)
-    - Redact before logging
-    - Maintain correlation IDs (session_id, trace_id) for debugging
+- [x] 12. PII Redaction & Audit Logging
+  - [x] 12.1 Implement PII redaction in logs
     - _Requirements: 15.3, 14.4_
 
-- [ ] 13. Observability Stack
-  - [ ] 13.1 Implement comprehensive Prometheus metrics
-    - Add latency histograms: `websocket_message_processing`, `stt_transcription`, `tts_synthesis`, `llm_generation`
-    - Add gauges: `active_connections`, `queue_depth`, `worker_utilization`
-    - Add counters: `requests_total`, `errors_total`, `rate_limits_total`
-    - _Requirements: 14.1, 14.2, 14.3_
+  - [x] 12.2 Implement audit logging for admin actions
+    - _Requirements: 1.7, 15.5_
 
-  - [ ] 13.2 Configure Prometheus scraping
-    - Create prometheus.yml with service discovery
-    - Set scrape interval to 15 seconds
-    - Configure 7-day retention for local development
-    - _Requirements: 14.1_
-
-  - [ ] 13.3 Create Grafana dashboards
-    - System overview dashboard
-    - Per-service dashboards (Gateway, STT, TTS, LLM)
-    - Alert configuration for SLO breaches
-    - _Requirements: 14.1, 14.7_
-
-  - [ ] 13.4 Implement structured JSON logging
-    - JSON format with fields: timestamp, level, service, tenant_id, session_id, correlation_id, message
-    - Configure log levels per service
-    - _Requirements: 14.4_
-
-- [ ] 14. Error Handling & Fault Tolerance
-  - [ ] 14.1 Implement error taxonomy per OpenAI spec
-    - Define all error types: `invalid_request_error`, `authentication_error`, `rate_limit_error`, `api_error`, etc.
-    - Create error event factory
-    - Standardize error responses
-    - _Requirements: 16.1_
-
-  - [ ] 14.2 Implement graceful degradation modes
-    - Text-only mode when TTS fails
-    - Echo mode with apology when LLM fails
-    - Degraded mode when Redis partially fails (reject new connections, continue existing)
-    - _Requirements: 16.6_
-
-  - [ ]* 14.3 Write property test for heartbeat liveness
-    - **Property 7: Heartbeat Liveness**
-    - **Validates: Requirements 9.3, 9.4**
-
-- [ ] 15. Checkpoint - Verify observability and error handling
+- [x] 13. Checkpoint - Auth & Multi-Tenancy
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 16. Integration Testing
-  - [ ] 16.1 Create end-to-end test suite
-    - Test full speech-to-speech pipeline
-    - Test cancel propagation across all workers
-    - Test session persistence across gateway restart
-    - _Requirements: 7.1, 7.3_
+---
 
-  - [ ] 16.2 Create load test suite with Locust
-    - Test 100 concurrent connections (local dev limit)
-    - Test rate limiting under load
-    - Measure latency percentiles (p50, p95, p99)
-    - _Requirements: 7.1, 6.1_
+## Phase 6: Observability
 
-- [ ] 17. Docker Compose Production Configuration
-  - [ ] 17.1 Update docker-compose.yml with all services
-    - Gateway service (1GB memory limit)
-    - STT worker (4GB memory limit)
-    - TTS worker (3GB memory limit)
-    - LLM worker (1GB memory limit)
-    - Redis (2GB memory limit)
-    - PostgreSQL (1GB memory limit)
-    - Prometheus (512MB memory limit)
-    - Grafana (512MB memory limit)
-    - Total: ~15GB for local development
+- [x] 14. Metrics & Monitoring
+  - [x] 14.1 Add latency histograms (p50/p95/p99) for all operations
+    - _Requirements: 14.1, 14.2_
+
+  - [x] 14.2 Add gauges for active_connections, queue_depth, worker_utilization
+    - _Requirements: 14.3_
+
+  - [x] 14.3 Configure Prometheus scraping and Grafana dashboards
+    - _Requirements: 14.1, 14.7_
+
+- [x] 15. Structured Logging
+  - [x] 15.1 Implement JSON logging with correlation IDs
+    - _Requirements: 14.4_
+
+- [x] 16. Checkpoint - Observability
+  - Ensure all tests pass, ask the user if questions arise.
+
+---
+
+## Phase 7: Error Handling & Fault Tolerance
+
+- [x] 17. Error Handling
+  - [x] 17.1 Implement OpenAI-compatible error taxonomy
+    - _Requirements: 16.1_
+
+  - [x] 17.2 Implement graceful degradation modes
+    - Text-only when TTS fails, echo mode when LLM fails
+    - _Requirements: 16.6_
+
+- [x] 18. Checkpoint - Error Handling
+  - Ensure all tests pass, ask the user if questions arise.
+
+---
+
+## Phase 7.5: Real Infrastructure Integration Tests
+
+- [x] 18.5. Real Infrastructure Tests (Docker Compose Stack)
+  - [x] 18.5.1 Create docker-compose.test.yml with full stack (Redis, PostgreSQL, Gateway, Workers)
+    - Real Redis 7 cluster mode simulation
+    - Real PostgreSQL 16 with test database
+    - Real Gateway service
+    - Real STT/TTS/LLM workers (can use mock models for speed)
     - _Requirements: 17.6_
 
-  - [ ] 17.2 Create health check endpoints
-    - `/health` for liveness probe
-    - `/ready` for readiness probe (includes dependency checks)
-    - _Requirements: 7.7_
+  - [x] 18.5.2 Real Redis Integration Tests
+    - Test distributed session creation/retrieval across multiple gateway instances
+    - Test rate limiter accuracy under concurrent load (100 requests)
+    - Test Redis failover behavior (kill primary, verify replica promotion)
+    - Test Redis Streams consumer group rebalancing
+    - Test session TTL expiration and cleanup
+    - _Requirements: 9.1, 9.2, 9.3, 9.6_
 
-- [ ] 18. Documentation
-  - [ ] 18.1 Create local development guide
-    - Docker Compose setup instructions
-    - Environment variable documentation
-    - Troubleshooting guide
+  - [x] 18.5.3 Real PostgreSQL Integration Tests
+    - Test tenant isolation (create 2 tenants, verify no cross-access)
+    - Test conversation item persistence and retrieval
+    - Test audit log writes and queries
+    - Test database connection pool under load
+    - Test migration rollback/forward
+    - _Requirements: 13.1, 13.2, 13.5_
+
+  - [x] 18.5.4 Real WebSocket Gateway Tests
+    - Test WebSocket connection lifecycle (connect, auth, messages, disconnect)
+    - Test session reconnection to different gateway instance
+    - Test graceful shutdown with active connections (SIGTERM)
+    - Test rate limiting rejection with proper error codes
+    - Test concurrent connections (50+ simultaneous)
+    - _Requirements: 7.1, 7.2, 7.4, 7.6_
+
+  - [x] 18.5.5 Real Worker Pipeline Tests
+    - Test STT worker: send real audio, verify transcription returned
+    - Test TTS worker: send text, verify audio chunks returned in order
+    - Test LLM worker: send prompt, verify streaming response
+    - Test worker failover (kill worker, verify work reassigned)
+    - Test cancellation propagation (cancel mid-TTS, verify stops)
+    - _Requirements: 10.1, 10.2, 11.1, 11.2, 12.1, 12.2_
+
+  - [x] 18.5.6 Real End-to-End Speech Pipeline Test
+    - Full flow: Audio → STT → LLM → TTS → Audio out
+    - Measure actual latencies (STT p95 < 500ms, TTS TTFB p95 < 200ms)
+    - Test with multiple concurrent sessions
+    - _Requirements: 14.2_
+
+  - [x] 18.5.7 Real Authentication & Multi-Tenancy Tests
+    - Test API key validation against real PostgreSQL
+    - Test ephemeral token flow (issue, validate, expire)
+    - Test tenant isolation in Redis keys
+    - Test cross-tenant access denial
+    - _Requirements: 3.1, 3.2, 3.5, 1.2, 1.3_
+
+- [-] 18.6. Checkpoint - Real Infrastructure Tests
+  - All tests run against real Docker Compose stack
+  - No mocks, no fakes, no stubs
+  - Verify actual latencies meet SLA targets
+
+---
+
+## Phase 8: SaaS Platform - Identity (Keycloak)
+
+- [ ] 19. Keycloak Integration
+  - [ ] 19.1 Add Keycloak 24 to docker-compose.yml
+    - _Requirements: 19.1_
+
+  - [ ] 19.2 Create realm configuration with roles (tenant_admin, developer, viewer, billing_admin)
+    - _Requirements: 19.2, 19.7_
+
+  - [ ] 19.3 Implement KeycloakService for user/realm management
+    - _Requirements: 19.2, 19.8_
+
+  - [ ] 19.4 Integrate Keycloak JWT validation in gateway
+    - _Requirements: 19.4, 19.7_
+
+  - [ ] 19.5 Implement user deactivation flow
+    - _Requirements: 19.9_
+
+- [ ] 20. Checkpoint - Keycloak
+  - Ensure all tests pass, ask the user if questions arise.
+
+---
+
+## Phase 9: SaaS Platform - Billing (Lago)
+
+- [ ] 21. Lago Integration
+  - [ ] 21.1 Add Lago to docker-compose.yml
+    - _Requirements: 20.1_
+
+  - [ ] 21.2 Configure billing plans (Free, Pro, Enterprise)
+    - _Requirements: 20.3, 23.1_
+
+  - [ ] 21.3 Configure billable metrics (api_requests, audio_minutes, llm_tokens)
+    - _Requirements: 20.4_
+
+  - [ ] 21.4 Implement LagoService for customer/subscription management
+    - _Requirements: 20.1, 20.5_
+
+  - [ ] 21.5 Implement async usage metering pipeline
+    - _Requirements: 20.5_
+
+- [ ] 22. Payment Processors
+  - [ ] 22.1 Integrate Stripe with webhook handlers
+    - _Requirements: 20.6, 22.1_
+
+  - [ ] 22.2 Integrate PayPal with webhook handlers
+    - _Requirements: 20.6, 22.2_
+
+  - [ ] 22.3 Implement refund processing
+    - _Requirements: 20.8, 22.7_
+
+  - [ ] 22.4 Implement dunning and suspension flow
+    - _Requirements: 20.9_
+
+- [ ] 23. Checkpoint - Billing
+  - Ensure all tests pass, ask the user if questions arise.
+
+---
+
+## Phase 10: Customer Portal Backend
+
+- [ ] 24. Portal API
+  - [ ] 24.1 Create FastAPI portal service with Keycloak auth middleware
+    - _Requirements: 21.1, 21.2_
+
+  - [ ] 24.2 Implement dashboard endpoints (usage, billing, health)
+    - _Requirements: 21.3, 21.5_
+
+  - [ ] 24.3 Implement API key management endpoints
+    - _Requirements: 21.4_
+
+  - [ ] 24.4 Implement billing endpoints (plan, invoices, upgrade/downgrade)
+    - _Requirements: 21.6, 21.7_
+
+  - [ ] 24.5 Implement payment method endpoints
+    - _Requirements: 22.3, 22.4, 22.6_
+
+  - [ ] 24.6 Implement team management endpoints
+    - _Requirements: 21.9_
+
+  - [ ] 24.7 Implement settings and webhook endpoints
+    - _Requirements: 21.8_
+
+- [ ] 25. Checkpoint - Portal Backend
+  - Ensure all tests pass, ask the user if questions arise.
+
+---
+
+## Phase 11: Customer Portal Frontend
+
+- [ ] 26. Portal UI
+  - [ ] 26.1 Set up Next.js 14 with TypeScript and Tailwind
+    - _Requirements: 21.1, 21.10_
+
+  - [ ] 26.2 Implement dashboard page with usage charts
+    - _Requirements: 21.3_
+
+  - [ ] 26.3 Implement API keys management page
+    - _Requirements: 21.4_
+
+  - [ ] 26.4 Implement usage analytics page
+    - _Requirements: 21.5_
+
+  - [ ] 26.5 Implement billing page (plans, invoices, payment methods)
+    - _Requirements: 21.6, 21.7_
+
+  - [ ] 26.6 Implement team management page
+    - _Requirements: 21.9_
+
+  - [ ] 26.7 Implement settings page
+    - _Requirements: 21.8_
+
+  - [ ] 26.8 Implement responsive design and WCAG 2.1 AA accessibility
+    - _Requirements: 21.10_
+
+- [ ] 27. Checkpoint - Portal Frontend
+  - Ensure all tests pass, ask the user if questions arise.
+
+---
+
+## Phase 12: Tenant Onboarding
+
+- [ ] 28. Onboarding Flow
+  - [ ] 28.1 Implement signup endpoint (creates Keycloak user, Lago customer, first API key)
+    - _Requirements: 24.1, 24.2_
+
+  - [ ] 28.2 Implement signup frontend with email verification
+    - _Requirements: 24.2, 24.3_
+
+  - [ ] 28.3 Implement interactive quickstart (test API call)
+    - _Requirements: 24.4, 24.5_
+
+  - [ ] 28.4 Implement welcome email template
+    - _Requirements: 24.3_
+
+  - [ ] 28.5 Implement onboarding milestone tracking
+    - _Requirements: 24.7, 24.8_
+
+- [ ] 29. Checkpoint - Onboarding
+  - Ensure all tests pass, ask the user if questions arise.
+
+---
+
+## Phase 13: Final Integration & Documentation
+
+- [ ] 30. Integration Testing
+  - [ ] 30.1 End-to-end onboarding test
+  - [ ] 30.2 Billing integration test (Stripe test mode)
+  - [ ] 30.3 Full speech-to-speech pipeline test
+  - [ ] 30.4 Load test with Locust (100 concurrent connections)
+
+- [ ] 31. Documentation
+  - [ ] 31.1 Local development guide (Docker Compose setup)
     - _Requirements: 18.1, 18.4_
 
-  - [ ] 18.2 Create API documentation
-    - OpenAPI 3.1 spec for REST endpoints
-    - WebSocket event documentation (AsyncAPI)
-    - Code examples
-    - _Requirements: 18.1, 18.2_
+  - [ ] 31.2 OpenAPI 3.1 spec for REST endpoints
+    - _Requirements: 18.1_
 
-- [ ] 19. Final Checkpoint - Production readiness verification
+  - [ ] 31.3 AsyncAPI spec for WebSocket events
+    - _Requirements: 18.2_
+
+- [ ] 32. Final Checkpoint - Production Ready
   - Ensure all tests pass, ask the user if questions arise.

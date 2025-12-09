@@ -129,10 +129,23 @@ class DistributedSessionManager:
     MAX_CONVERSATION_ITEMS = 100
     PUBSUB_PREFIX = "channel:session"
 
-    def __init__(self, redis_client: RedisClient, gateway_id: str) -> None:
+    def __init__(
+        self,
+        redis_client: RedisClient,
+        gateway_id: str,
+        overflow_handler: Optional[Any] = None,
+    ) -> None:
         self._redis = redis_client
         self._gateway_id = gateway_id
         self._cleanup_task: Optional[asyncio.Task] = None
+        self._overflow_handler = overflow_handler  # ConversationOverflowHandler
+
+    def set_overflow_handler(self, handler: Any) -> None:
+        """Set the overflow handler for Redis-to-PostgreSQL persistence.
+
+        Called after async database client is initialized.
+        """
+        self._overflow_handler = handler
 
     def _session_key(self, tenant_id: str, session_id: str) -> str:
         """Generate namespaced session key for tenant isolation."""
@@ -356,15 +369,16 @@ class DistributedSessionManager:
         item: Dict[str, Any],
     ) -> bool:
         """Append a conversation item to the session.
-        
+
         Items are stored in a Redis list, capped at MAX_CONVERSATION_ITEMS.
-        Overflow items should be persisted to PostgreSQL separately.
-        
+        When overflow occurs, older items are persisted to PostgreSQL
+        asynchronously within 5 seconds (Requirements 13.5, 9.5).
+
         Args:
             session_id: Session identifier
             tenant_id: Tenant ID for isolation
             item: Conversation item to append
-            
+
         Returns:
             True if item was appended
         """
@@ -373,10 +387,24 @@ class DistributedSessionManager:
 
         # Append item as JSON
         await client.rpush(key, json.dumps(item))
-        
-        # Trim to max items (keep most recent)
-        await client.ltrim(key, -self.MAX_CONVERSATION_ITEMS, -1)
-        
+
+        # Check if overflow needed before trimming
+        count = await client.llen(key)
+        if count > self.MAX_CONVERSATION_ITEMS and self._overflow_handler:
+            # Trigger async overflow to PostgreSQL
+            try:
+                await self._overflow_handler.check_and_overflow(session_id, tenant_id)
+            except Exception as e:
+                logger.warning(
+                    "Overflow to PostgreSQL failed, trimming Redis",
+                    extra={"session_id": session_id, "error": str(e)},
+                )
+                # Fallback: just trim Redis (data loss for overflow items)
+                await client.ltrim(key, -self.MAX_CONVERSATION_ITEMS, -1)
+        else:
+            # Trim to max items (keep most recent)
+            await client.ltrim(key, -self.MAX_CONVERSATION_ITEMS, -1)
+
         # Set TTL to match session
         await client.expire(key, self.HEARTBEAT_TTL * 2)
 

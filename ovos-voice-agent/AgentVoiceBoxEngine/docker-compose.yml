@@ -116,6 +116,8 @@ services:
       --maxmemory-policy volatile-lru
       --save 60 1
       --loglevel warning
+    ports:
+      - "6379:6379"
     volumes:
       - redis-data:/data
     healthcheck:
@@ -123,6 +125,76 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - voice-engine
+
+  # STT Worker - Speech-to-Text transcription
+  stt-worker:
+    build:
+      context: .
+      dockerfile: workers/Dockerfile.stt
+    image: agentvoicebox/stt-worker:latest
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      STT_MODEL: base
+      STT_DEVICE: auto
+      STT_COMPUTE_TYPE: float16
+      STT_BATCH_SIZE: 4
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+    networks:
+      - voice-engine
+
+  # TTS Worker - Text-to-Speech synthesis
+  tts-worker:
+    build:
+      context: .
+      dockerfile: workers/Dockerfile.tts
+    image: agentvoicebox/tts-worker:latest
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      KOKORO_MODEL_DIR: /app/cache/kokoro
+      TTS_DEFAULT_VOICE: am_onyx
+      TTS_DEFAULT_SPEED: "1.1"
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - kokoro-models:/app/cache/kokoro
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+    networks:
+      - voice-engine
+
+  # LLM Worker - Language Model inference
+  llm-worker:
+    build:
+      context: .
+      dockerfile: workers/Dockerfile.llm
+    image: agentvoicebox/llm-worker:latest
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      LLM_DEFAULT_PROVIDER: ${LLM_DEFAULT_PROVIDER:-groq}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      LLM_DEFAULT_MODEL: llama-3.1-70b-versatile
+      CIRCUIT_BREAKER_THRESHOLD: "5"
+      CIRCUIT_BREAKER_TIMEOUT: "30"
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 2G
     networks:
       - voice-engine
 
@@ -144,6 +216,7 @@ volumes:
   kafka-data:
   redis-data:
   agentvoicebox-data:
+  kokoro-models:
 
 networks:
   voice-engine:

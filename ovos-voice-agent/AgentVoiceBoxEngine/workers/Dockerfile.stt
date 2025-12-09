@@ -1,0 +1,61 @@
+# STT Worker Dockerfile
+# Speech-to-Text transcription using Faster-Whisper
+#
+# Build: docker build -f workers/Dockerfile.stt -t agentvoicebox/stt-worker .
+# Run: docker run --gpus all -e REDIS_URL=redis://host:6379/0 agentvoicebox/stt-worker
+#
+# Memory limit: 4GB (set via docker run --memory=4g or Kubernetes resources)
+
+# Base image with CUDA support for GPU acceleration
+FROM nvidia/cuda:12.1-cudnn8-runtime-ubuntu22.04 AS base
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install Python and system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 \
+    python3.11-venv \
+    python3-pip \
+    libsndfile1 \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user for security
+RUN useradd -m -u 1000 worker
+WORKDIR /app
+
+# Create virtual environment
+RUN python3.11 -m venv /app/venv
+ENV PATH="/app/venv/bin:$PATH"
+
+# Install Python dependencies
+COPY workers/requirements-stt.txt /app/
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements-stt.txt
+
+# Copy application code
+COPY app/ /app/app/
+COPY workers/ /app/workers/
+
+# Set ownership
+RUN chown -R worker:worker /app
+
+# Switch to non-root user
+USER worker
+
+# Environment variables with defaults
+ENV REDIS_URL=redis://localhost:6379/0 \
+    STT_MODEL=base \
+    STT_DEVICE=auto \
+    STT_COMPUTE_TYPE=float16 \
+    STT_BATCH_SIZE=4 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Health check - verify worker can import and connect
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD python -c "from workers.stt_worker import STTWorker; print('OK')" || exit 1
+
+# Run the STT worker
+CMD ["python", "-m", "workers.stt_worker"]

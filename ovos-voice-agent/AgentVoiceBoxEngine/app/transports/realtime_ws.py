@@ -27,12 +27,17 @@ from simple_websocket import ConnectionClosed
 # Local imports – sorted alphabetically for lint compliance
 from ..dependencies import (
     get_app_config,
+    get_connection_manager,
+    get_distributed_session_manager,
     get_opa_client,
     get_rate_limiter,
+    get_redis_streams_client,
     get_session_service,
     get_token_service,
 )
 from ..services.distributed_rate_limiter import count_tokens
+from ..services.distributed_session import DistributedSessionManager, Session as RedisSession, SessionConfig as RedisSessionConfig
+from ..services.redis_streams import RedisStreamsClient, AudioSTTRequest, TTSRequest
 from ..models.session import SessionModel
 from ..observability.metrics import policy_denials
 from ..schemas.realtime import RealtimeSessionResource
@@ -97,6 +102,10 @@ def register_realtime_websocket(app) -> None:
             ws.close()
             return
 
+        # Get distributed session manager (Redis-backed for real-time state)
+        distributed_session_manager = get_distributed_session_manager()
+        
+        # Create session in PostgreSQL (source of truth for persistence)
         session_model = session_service.get_session(token_record.session_id)
         if session_model is None:
             session_model = session_service.create_session(
@@ -107,8 +116,52 @@ def register_realtime_websocket(app) -> None:
                 persona=None,
             )
 
+        # Create session in Redis (fast access for real-time state)
+        redis_session = None
+        tenant_id = token_record.project_id or "default"
+        if distributed_session_manager is not None:
+            try:
+                redis_config = RedisSessionConfig(
+                    model=token_record.session_config.get("model", "ovos-voice-1"),
+                    voice=token_record.session_config.get("voice", "am_onyx"),
+                    speed=float(token_record.session_config.get("speed", 1.1)),
+                    temperature=float(token_record.session_config.get("temperature", 0.8)),
+                    instructions=token_record.session_config.get("instructions", "You are a helpful assistant."),
+                    tools=token_record.session_config.get("tools", []),
+                )
+                redis_session = _run_async(
+                    distributed_session_manager.create_session(
+                        session_id=token_record.session_id,
+                        tenant_id=tenant_id,
+                        project_id=token_record.project_id,
+                        config=redis_config,
+                    )
+                )
+            except Exception as e:
+                logger.warning(f"Failed to create Redis session, using PostgreSQL only: {e}")
+
         # Get distributed rate limiter (falls back to None if Redis unavailable)
         rate_limiter = get_rate_limiter()
+        
+        # Get connection manager for tracking and graceful shutdown
+        connection_manager = get_connection_manager()
+        
+        # Check if server is shutting down - reject new connections
+        if connection_manager and connection_manager.is_shutting_down:
+            _send_error(ws, "api_error", "server_shutting_down", "Server is shutting down, please reconnect to another instance")
+            ws.close()
+            return
+        
+        # Register this connection for tracking
+        if connection_manager:
+            connection_manager.register_connection(
+                session_id=token_record.session_id,
+                tenant_id=tenant_id,
+                websocket=ws,
+            )
+
+        # Get Redis Streams client for worker communication
+        streams_client = get_redis_streams_client()
 
         connection = RealtimeWebsocketConnection(
             ws=ws,
@@ -117,11 +170,17 @@ def register_realtime_websocket(app) -> None:
             session_service=session_service,
             token_record=token_record,
             rate_limiter=rate_limiter,
+            distributed_session_manager=distributed_session_manager,
+            redis_session=redis_session,
+            streams_client=streams_client,
         )
 
         try:
             connection.run()
         finally:
+            # Unregister connection on close
+            if connection_manager:
+                connection_manager.unregister_connection(token_record.session_id)
             logger.info("Realtime connection closed", extra={"session_id": session_model.id})
 
 
@@ -243,6 +302,9 @@ class RealtimeWebsocketConnection:
         session_service: SessionService,
         token_record: ClientSecretRecord,
         rate_limiter=None,
+        distributed_session_manager: Optional[DistributedSessionManager] = None,
+        redis_session: Optional[RedisSession] = None,
+        streams_client: Optional[RedisStreamsClient] = None,
     ) -> None:
         self._ws = ws
         self._config = config
@@ -250,26 +312,46 @@ class RealtimeWebsocketConnection:
         self._session = session
         self._token = token_record
         self._rate_limiter = rate_limiter
+        self._distributed_session_manager = distributed_session_manager
+        self._redis_session = redis_session
+        self._streams_client = streams_client
         self._conversation_order: List[str] = []
         self._is_speaking = False
         self._audio_buffer = bytearray()
         self._last_user_transcript: Optional[str] = None
         self._cancel_current: bool = False
         self._tenant_id = token_record.project_id or "default"
+        self._heartbeat_interval = 15  # seconds
+        self._use_distributed_workers = streams_client is not None
 
     def run(self) -> None:
         logger.info(
             "Realtime connection established",
             extra={"session_id": self._session.id, "project_id": self._token.project_id},
         )
+        
+        # Update Redis session status to connected
+        self._update_redis_session({"status": "connected"})
+        
         self._send_event({"type": "session.created", "session": _session_resource(self._session)})
         self._send_event(_rate_limits_payload(self._config.security.rate_limits))
 
+        last_heartbeat = time.time()
+        
         while True:
             try:
-                message = self._ws.receive()
+                message = self._ws.receive(timeout=1.0)
             except ConnectionClosed:
                 break
+            except Exception:
+                # Timeout or other error - check heartbeat
+                message = None
+
+            # Send heartbeat to Redis every interval
+            now = time.time()
+            if now - last_heartbeat >= self._heartbeat_interval:
+                self._send_heartbeat()
+                last_heartbeat = now
 
             if message is None:
                 continue
@@ -310,6 +392,157 @@ class RealtimeWebsocketConnection:
                     "internal_error",
                     "Internal error processing event",
                 )
+        
+        # Connection closed - cleanup Redis session
+        self._close_redis_session()
+
+    # Redis session management ------------------------------------------------------
+
+    def _send_heartbeat(self) -> None:
+        """Send heartbeat to Redis to keep session alive."""
+        if self._distributed_session_manager is None:
+            return
+        try:
+            _run_async(
+                self._distributed_session_manager.heartbeat(
+                    self._session.id,
+                    self._tenant_id,
+                )
+            )
+        except Exception as e:
+            logger.warning(f"Heartbeat failed: {e}")
+
+    def _update_redis_session(self, updates: Dict[str, Any]) -> None:
+        """Update session state in Redis."""
+        if self._distributed_session_manager is None:
+            return
+        try:
+            self._redis_session = _run_async(
+                self._distributed_session_manager.update_session(
+                    self._session.id,
+                    self._tenant_id,
+                    updates,
+                )
+            )
+        except Exception as e:
+            logger.warning(f"Redis session update failed: {e}")
+
+    def _close_redis_session(self) -> None:
+        """Close session in Redis on disconnect."""
+        # Cleanup worker streams first
+        self._cleanup_worker_streams()
+        
+        if self._distributed_session_manager is None:
+            return
+        try:
+            _run_async(
+                self._distributed_session_manager.close_session(
+                    self._session.id,
+                    self._tenant_id,
+                )
+            )
+            logger.info("Redis session closed", extra={"session_id": self._session.id})
+        except Exception as e:
+            logger.warning(f"Redis session close failed: {e}")
+
+    def _append_to_redis_conversation(self, item: Dict[str, Any]) -> None:
+        """Append conversation item to Redis (fast) and PostgreSQL (durable)."""
+        if self._distributed_session_manager is not None:
+            try:
+                _run_async(
+                    self._distributed_session_manager.append_conversation_item(
+                        self._session.id,
+                        self._tenant_id,
+                        item,
+                    )
+                )
+            except Exception as e:
+                logger.warning(f"Redis conversation append failed: {e}")
+
+    # Worker communication ----------------------------------------------------------
+
+    def _publish_audio_for_stt(self, audio_b64: str, language: Optional[str] = None) -> Optional[str]:
+        """Publish audio to STT worker via Redis Streams.
+        
+        Args:
+            audio_b64: Base64 encoded audio data
+            language: Optional language hint
+            
+        Returns:
+            Message ID if published, None if streams not available
+        """
+        if self._streams_client is None:
+            return None
+        
+        try:
+            request = AudioSTTRequest(
+                session_id=self._session.id,
+                tenant_id=self._tenant_id,
+                audio_b64=audio_b64,
+                language=language,
+            )
+            return _run_async(self._streams_client.publish_audio_for_stt(request))
+        except Exception as e:
+            logger.warning(f"Failed to publish audio for STT: {e}")
+            return None
+
+    def _publish_tts_request(
+        self,
+        text: str,
+        voice: str = "am_onyx",
+        speed: float = 1.1,
+        response_id: str = "",
+        item_id: str = "",
+    ) -> Optional[str]:
+        """Publish text to TTS worker via Redis Streams.
+        
+        Args:
+            text: Text to synthesize
+            voice: Voice ID
+            speed: Speech speed
+            response_id: Response ID for correlation
+            item_id: Item ID for correlation
+            
+        Returns:
+            Message ID if published, None if streams not available
+        """
+        if self._streams_client is None:
+            return None
+        
+        try:
+            request = TTSRequest(
+                session_id=self._session.id,
+                tenant_id=self._tenant_id,
+                text=text,
+                voice=voice,
+                speed=speed,
+                response_id=response_id,
+                item_id=item_id,
+            )
+            return _run_async(self._streams_client.publish_tts_request(request))
+        except Exception as e:
+            logger.warning(f"Failed to publish TTS request: {e}")
+            return None
+
+    def _cancel_tts_worker(self) -> None:
+        """Signal TTS cancellation to workers."""
+        if self._streams_client is None:
+            return
+        
+        try:
+            _run_async(self._streams_client.cancel_tts(self._session.id))
+        except Exception as e:
+            logger.warning(f"Failed to cancel TTS: {e}")
+
+    def _cleanup_worker_streams(self) -> None:
+        """Clean up worker streams on session close."""
+        if self._streams_client is None:
+            return
+        
+        try:
+            _run_async(self._streams_client.cleanup_session_streams(self._session.id))
+        except Exception as e:
+            logger.warning(f"Failed to cleanup worker streams: {e}")
 
     # Rate limiting -----------------------------------------------------------------
 
@@ -609,10 +842,32 @@ class RealtimeWebsocketConnection:
                 }
             )
 
+        # Emit response.done to signal completion
+        self._send_event(
+            {
+                "type": "response.done",
+                "response": {
+                    "id": response_id,
+                    "object": "realtime.response",
+                    "status": "completed",
+                    "output": [response_item],
+                    "usage": {
+                        "total_tokens": len(assistant_text.split()),
+                        "input_tokens": len(user_text.split()),
+                        "output_tokens": len(assistant_text.split()),
+                    },
+                },
+            }
+        )
+
     def handle_response_cancel(self, payload: Dict[str, Any]) -> None:
         # Mark cancel and notify client
         self._cancel_current = True
         response_id = payload.get("response_id") or _generate_response_id()
+        
+        # Cancel TTS workers if using distributed mode
+        self._cancel_tts_worker()
+        
         self._send_event({"type": "response.cancelled", "response_id": response_id})
 
     # Internal helpers ----------------------------------------------------------------
@@ -636,6 +891,10 @@ class RealtimeWebsocketConnection:
         if metadata:
             item.update({k: v for k, v in metadata.items() if k != "id"})
 
+        # Write to Redis (fast, for real-time access)
+        self._append_to_redis_conversation(item)
+        
+        # Write to PostgreSQL (durable, source of truth)
         self._session_service.append_conversation_item(self._session.id, item)
 
         previous_item_id = self._conversation_order[-1] if self._conversation_order else None

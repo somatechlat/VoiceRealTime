@@ -1,0 +1,17 @@
+# TTS Worker Dependencies
+# For Kokoro ONNX text-to-speech synthesis
+
+# Core dependencies
+redis>=5.0.0
+pydantic>=2.7.0
+pydantic-settings>=2.4.0
+
+# Kokoro ONNX for TTS
+kokoro-onnx>=0.4.0
+
+# Audio processing
+numpy>=1.24.0
+soundfile>=0.12.0
+
+# ONNX Runtime (CPU version - use onnxruntime-gpu for GPU)
+onnxruntime>=1.16.0

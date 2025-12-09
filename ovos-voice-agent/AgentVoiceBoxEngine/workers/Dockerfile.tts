@@ -1,0 +1,55 @@
+# TTS Worker Dockerfile
+# Text-to-Speech synthesis using Kokoro ONNX
+#
+# Build: docker build -f workers/Dockerfile.tts -t agentvoicebox/tts-worker .
+# Run: docker run -e REDIS_URL=redis://host:6379/0 -v /path/to/models:/app/cache/kokoro agentvoicebox/tts-worker
+#
+# Memory limit: 3GB (set via docker run --memory=3g or Kubernetes resources)
+
+FROM python:3.11-slim AS base
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libsndfile1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user for security
+RUN useradd -m -u 1000 worker
+WORKDIR /app
+
+# Create virtual environment
+RUN python -m venv /app/venv
+ENV PATH="/app/venv/bin:$PATH"
+
+# Install Python dependencies
+COPY workers/requirements-tts.txt /app/
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements-tts.txt
+
+# Copy application code
+COPY app/ /app/app/
+COPY workers/ /app/workers/
+
+# Create cache directory for models
+RUN mkdir -p /app/cache/kokoro && chown -R worker:worker /app
+
+# Switch to non-root user
+USER worker
+
+# Environment variables with defaults
+ENV REDIS_URL=redis://localhost:6379/0 \
+    KOKORO_MODEL_DIR=/app/cache/kokoro \
+    KOKORO_MODEL_FILE=kokoro-v1.0.onnx \
+    KOKORO_VOICES_FILE=voices-v1.0.bin \
+    TTS_DEFAULT_VOICE=am_onyx \
+    TTS_DEFAULT_SPEED=1.1 \
+    TTS_CHUNK_SIZE=24000 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD python -c "from workers.tts_worker import TTSWorker; print('OK')" || exit 1
+
+# Run the TTS worker
+CMD ["python", "-m", "workers.tts_worker"]

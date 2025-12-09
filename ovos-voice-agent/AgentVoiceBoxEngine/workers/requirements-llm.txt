@@ -1,0 +1,10 @@
+# LLM Worker Dependencies
+# For multi-provider LLM inference
+
+# Core dependencies
+redis>=5.0.0
+pydantic>=2.7.0
+pydantic-settings>=2.4.0
+
+# HTTP client for API calls
+httpx>=0.27.0

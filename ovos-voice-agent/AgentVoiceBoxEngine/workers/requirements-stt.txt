@@ -1,0 +1,19 @@
+# STT Worker Dependencies
+# For Faster-Whisper speech-to-text transcription
+
+# Core dependencies
+redis>=5.0.0
+pydantic>=2.7.0
+pydantic-settings>=2.4.0
+
+# Faster-Whisper for transcription
+# Uses CTranslate2 for optimized inference
+faster-whisper>=1.0.0
+
+# Audio processing
+numpy>=1.24.0
+soundfile>=0.12.0
+
+# Optional: PyTorch for CUDA detection
+# Uncomment if using GPU acceleration
+# torch>=2.0.0

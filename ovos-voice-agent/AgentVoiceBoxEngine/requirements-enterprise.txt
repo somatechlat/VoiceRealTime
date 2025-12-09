@@ -6,6 +6,10 @@ prometheus-client>=0.20.0
 python-json-logger>=2.0.7
 SQLAlchemy>=2.0.0
 psycopg[binary]>=3.1.0
+# Async PostgreSQL driver for workers (Requirements 13.1, 13.3)
+asyncpg>=0.29.0
+# Argon2id password hashing for API keys (Requirements 2.3, 3.2)
+argon2-cffi>=23.1.0
 pydantic>=2.7.0
 pydantic-settings>=2.4.0
 httpx>=0.27.0

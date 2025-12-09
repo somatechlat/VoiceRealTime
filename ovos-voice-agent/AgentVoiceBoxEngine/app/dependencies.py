@@ -13,6 +13,8 @@ from .services.token_service import TokenService
 from .services.redis_client import RedisClient
 from .services.distributed_rate_limiter import DistributedRateLimiter, RateLimitConfig
 from .services.distributed_session import DistributedSessionManager
+from .services.connection_manager import ConnectionManager
+from .services.redis_streams import RedisStreamsClient
 from .utils.database import create_session_factory
 
 
@@ -100,6 +102,16 @@ def get_distributed_session_manager() -> Optional[DistributedSessionManager]:
     return manager
 
 
+def get_connection_manager() -> Optional[ConnectionManager]:
+    """Get the connection manager instance for tracking active connections."""
+    return current_app.extensions.get("connection_manager")
+
+
+def get_redis_streams_client() -> Optional[RedisStreamsClient]:
+    """Get the Redis Streams client for worker communication."""
+    return current_app.extensions.get("redis_streams_client")
+
+
 __all__ = [
     "get_app_config",
     "get_session_factory",
@@ -109,4 +121,6 @@ __all__ = [
     "get_redis_client",
     "get_rate_limiter",
     "get_distributed_session_manager",
+    "get_connection_manager",
+    "get_redis_streams_client",
 ]

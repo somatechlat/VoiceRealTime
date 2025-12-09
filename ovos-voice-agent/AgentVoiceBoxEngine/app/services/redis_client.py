@@ -227,8 +227,11 @@ class RedisClient:
         try:
             return await self.client.eval(script, len(keys), *keys, *args)
         except (ConnectionError, TimeoutError) as e:
-            logger.error("Redis EVAL failed", extra={"error": str(e)})
+            logger.error("Redis EVAL connection failed", extra={"error": str(e)})
             self.start_reconnect()
+            raise
+        except RedisError as e:
+            logger.error("Redis EVAL script error", extra={"error": str(e)})
             raise
 
 

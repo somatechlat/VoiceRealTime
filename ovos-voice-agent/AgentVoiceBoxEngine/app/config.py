@@ -13,7 +13,7 @@ class RedisSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     url: str = Field("redis://localhost:6379/0", description="Redis connection URL")
-    max_connections: int = Field(50, description="Maximum connections in pool")
+    max_connections: int = Field(200, description="Maximum connections in pool")
     socket_timeout: float = Field(5.0, description="Socket timeout in seconds")
     socket_connect_timeout: float = Field(5.0, description="Connection timeout in seconds")
     retry_on_timeout: bool = Field(True, description="Retry on timeout")
