@@ -23,3 +23,5 @@ Flask-Cors>=4.0.0
 PyJWT[crypto]>=2.8.0
 # Keycloak admin client (Requirements 19.2, 19.3)
 python-keycloak>=4.0.0
+# Stripe SDK for payment processing (Requirements 20.6, 22.1)
+stripe>=8.0.0

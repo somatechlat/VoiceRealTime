@@ -270,40 +270,40 @@ This implementation plan transforms the existing prototype into a production-rea
   - [x] 19.5 Implement user deactivation flow
     - _Requirements: 19.9_
 
-- [ ] 20. Checkpoint - Keycloak
+- [x] 20. Checkpoint - Keycloak
   - Ensure all tests pass, ask the user if questions arise.
 
 ---
 
 ## Phase 9: SaaS Platform - Billing (Lago)
 
-- [ ] 21. Lago Integration
-  - [ ] 21.1 Add Lago to docker-compose.yml
+- [x] 21. Lago Integration
+  - [x] 21.1 Add Lago to docker-compose.yml
     - _Requirements: 20.1_
 
-  - [ ] 21.2 Configure billing plans (Free, Pro, Enterprise)
+  - [x] 21.2 Configure billing plans (Free, Pro, Enterprise)
     - _Requirements: 20.3, 23.1_
 
-  - [ ] 21.3 Configure billable metrics (api_requests, audio_minutes, llm_tokens)
+  - [x] 21.3 Configure billable metrics (api_requests, audio_minutes, llm_tokens)
     - _Requirements: 20.4_
 
-  - [ ] 21.4 Implement LagoService for customer/subscription management
+  - [x] 21.4 Implement LagoService for customer/subscription management
     - _Requirements: 20.1, 20.5_
 
-  - [ ] 21.5 Implement async usage metering pipeline
+  - [x] 21.5 Implement async usage metering pipeline
     - _Requirements: 20.5_
 
-- [ ] 22. Payment Processors
-  - [ ] 22.1 Integrate Stripe with webhook handlers
+- [x] 22. Payment Processors
+  - [x] 22.1 Integrate Stripe with webhook handlers
     - _Requirements: 20.6, 22.1_
 
-  - [ ] 22.2 Integrate PayPal with webhook handlers
+  - [x] 22.2 Integrate PayPal with webhook handlers
     - _Requirements: 20.6, 22.2_
 
-  - [ ] 22.3 Implement refund processing
+  - [x] 22.3 Implement refund processing
     - _Requirements: 20.8, 22.7_
 
-  - [ ] 22.4 Implement dunning and suspension flow
+  - [x] 22.4 Implement dunning and suspension flow
     - _Requirements: 20.9_
 
 - [ ] 23. Checkpoint - Billing

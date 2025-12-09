@@ -1,0 +1,393 @@
+{
+  "plans": [
+    {
+      "name": "Free",
+      "code": "free",
+      "description": "Free tier for evaluation and small projects",
+      "interval": "monthly",
+      "pay_in_advance": false,
+      "amount_cents": 0,
+      "amount_currency": "USD",
+      "trial_period": 0,
+      "charges": [
+        {
+          "billable_metric_code": "api_requests",
+          "charge_model": "package",
+          "properties": {
+            "amount": "0",
+            "free_units": 100,
+            "package_size": 100
+          }
+        },
+        {
+          "billable_metric_code": "audio_minutes_input",
+          "charge_model": "package",
+          "properties": {
+            "amount": "0",
+            "free_units": 10,
+            "package_size": 10
+          }
+        },
+        {
+          "billable_metric_code": "audio_minutes_output",
+          "charge_model": "package",
+          "properties": {
+            "amount": "0",
+            "free_units": 10,
+            "package_size": 10
+          }
+        },
+        {
+          "billable_metric_code": "llm_tokens_input",
+          "charge_model": "package",
+          "properties": {
+            "amount": "0",
+            "free_units": 10000,
+            "package_size": 1000
+          }
+        },
+        {
+          "billable_metric_code": "llm_tokens_output",
+          "charge_model": "package",
+          "properties": {
+            "amount": "0",
+            "free_units": 5000,
+            "package_size": 1000
+          }
+        },
+        {
+          "billable_metric_code": "concurrent_connections",
+          "charge_model": "standard",
+          "properties": {
+            "amount": "0"
+          }
+        }
+      ],
+      "minimum_commitment": null
+    },
+    {
+      "name": "Pro",
+      "code": "pro",
+      "description": "Professional tier for production applications",
+      "interval": "monthly",
+      "pay_in_advance": false,
+      "amount_cents": 4900,
+      "amount_currency": "USD",
+      "trial_period": 14,
+      "charges": [
+        {
+          "billable_metric_code": "api_requests",
+          "charge_model": "graduated",
+          "properties": {
+            "graduated_ranges": [
+              {
+                "from_value": 0,
+                "to_value": 10000,
+                "per_unit_amount": "0",
+                "flat_amount": "0"
+              },
+              {
+                "from_value": 10001,
+                "to_value": null,
+                "per_unit_amount": "0.001",
+                "flat_amount": "0"
+              }
+            ]
+          }
+        },
+        {
+          "billable_metric_code": "audio_minutes_input",
+          "charge_model": "graduated",
+          "properties": {
+            "graduated_ranges": [
+              {
+                "from_value": 0,
+                "to_value": 1000,
+                "per_unit_amount": "0",
+                "flat_amount": "0"
+              },
+              {
+                "from_value": 1001,
+                "to_value": null,
+                "per_unit_amount": "0.006",
+                "flat_amount": "0"
+              }
+            ]
+          }
+        },
+        {
+          "billable_metric_code": "audio_minutes_output",
+          "charge_model": "graduated",
+          "properties": {
+            "graduated_ranges": [
+              {
+                "from_value": 0,
+                "to_value": 1000,
+                "per_unit_amount": "0",
+                "flat_amount": "0"
+              },
+              {
+                "from_value": 1001,
+                "to_value": null,
+                "per_unit_amount": "0.015",
+                "flat_amount": "0"
+              }
+            ]
+          }
+        },
+        {
+          "billable_metric_code": "llm_tokens_input",
+          "charge_model": "graduated",
+          "properties": {
+            "graduated_ranges": [
+              {
+                "from_value": 0,
+                "to_value": 1000000,
+                "per_unit_amount": "0",
+                "flat_amount": "0"
+              },
+              {
+                "from_value": 1000001,
+                "to_value": null,
+                "per_unit_amount": "0.00001",
+                "flat_amount": "0"
+              }
+            ]
+          }
+        },
+        {
+          "billable_metric_code": "llm_tokens_output",
+          "charge_model": "graduated",
+          "properties": {
+            "graduated_ranges": [
+              {
+                "from_value": 0,
+                "to_value": 500000,
+                "per_unit_amount": "0",
+                "flat_amount": "0"
+              },
+              {
+                "from_value": 500001,
+                "to_value": null,
+                "per_unit_amount": "0.00003",
+                "flat_amount": "0"
+              }
+            ]
+          }
+        },
+        {
+          "billable_metric_code": "concurrent_connections",
+          "charge_model": "graduated",
+          "properties": {
+            "graduated_ranges": [
+              {
+                "from_value": 0,
+                "to_value": 100,
+                "per_unit_amount": "0",
+                "flat_amount": "0"
+              },
+              {
+                "from_value": 101,
+                "to_value": null,
+                "per_unit_amount": "0.10",
+                "flat_amount": "0"
+              }
+            ]
+          }
+        }
+      ],
+      "minimum_commitment": null
+    },
+    {
+      "name": "Enterprise",
+      "code": "enterprise",
+      "description": "Enterprise tier with unlimited usage and dedicated support",
+      "interval": "monthly",
+      "pay_in_advance": false,
+      "amount_cents": 99900,
+      "amount_currency": "USD",
+      "trial_period": 0,
+      "charges": [
+        {
+          "billable_metric_code": "api_requests",
+          "charge_model": "standard",
+          "properties": {
+            "amount": "0"
+          }
+        },
+        {
+          "billable_metric_code": "audio_minutes_input",
+          "charge_model": "standard",
+          "properties": {
+            "amount": "0"
+          }
+        },
+        {
+          "billable_metric_code": "audio_minutes_output",
+          "charge_model": "standard",
+          "properties": {
+            "amount": "0"
+          }
+        },
+        {
+          "billable_metric_code": "llm_tokens_input",
+          "charge_model": "standard",
+          "properties": {
+            "amount": "0"
+          }
+        },
+        {
+          "billable_metric_code": "llm_tokens_output",
+          "charge_model": "standard",
+          "properties": {
+            "amount": "0"
+          }
+        },
+        {
+          "billable_metric_code": "concurrent_connections",
+          "charge_model": "standard",
+          "properties": {
+            "amount": "0"
+          }
+        }
+      ],
+      "minimum_commitment": {
+        "amount_cents": 99900,
+        "invoice_display_name": "Minimum Monthly Commitment"
+      }
+    },
+    {
+      "name": "Pro Annual",
+      "code": "pro_annual",
+      "description": "Professional tier with annual billing (2 months free)",
+      "interval": "yearly",
+      "pay_in_advance": true,
+      "amount_cents": 49000,
+      "amount_currency": "USD",
+      "trial_period": 14,
+      "charges": [
+        {
+          "billable_metric_code": "api_requests",
+          "charge_model": "graduated",
+          "properties": {
+            "graduated_ranges": [
+              {
+                "from_value": 0,
+                "to_value": 120000,
+                "per_unit_amount": "0",
+                "flat_amount": "0"
+              },
+              {
+                "from_value": 120001,
+                "to_value": null,
+                "per_unit_amount": "0.0008",
+                "flat_amount": "0"
+              }
+            ]
+          }
+        },
+        {
+          "billable_metric_code": "audio_minutes_input",
+          "charge_model": "graduated",
+          "properties": {
+            "graduated_ranges": [
+              {
+                "from_value": 0,
+                "to_value": 12000,
+                "per_unit_amount": "0",
+                "flat_amount": "0"
+              },
+              {
+                "from_value": 12001,
+                "to_value": null,
+                "per_unit_amount": "0.005",
+                "flat_amount": "0"
+              }
+            ]
+          }
+        },
+        {
+          "billable_metric_code": "audio_minutes_output",
+          "charge_model": "graduated",
+          "properties": {
+            "graduated_ranges": [
+              {
+                "from_value": 0,
+                "to_value": 12000,
+                "per_unit_amount": "0",
+                "flat_amount": "0"
+              },
+              {
+                "from_value": 12001,
+                "to_value": null,
+                "per_unit_amount": "0.012",
+                "flat_amount": "0"
+              }
+            ]
+          }
+        },
+        {
+          "billable_metric_code": "llm_tokens_input",
+          "charge_model": "graduated",
+          "properties": {
+            "graduated_ranges": [
+              {
+                "from_value": 0,
+                "to_value": 12000000,
+                "per_unit_amount": "0",
+                "flat_amount": "0"
+              },
+              {
+                "from_value": 12000001,
+                "to_value": null,
+                "per_unit_amount": "0.000008",
+                "flat_amount": "0"
+              }
+            ]
+          }
+        },
+        {
+          "billable_metric_code": "llm_tokens_output",
+          "charge_model": "graduated",
+          "properties": {
+            "graduated_ranges": [
+              {
+                "from_value": 0,
+                "to_value": 6000000,
+                "per_unit_amount": "0",
+                "flat_amount": "0"
+              },
+              {
+                "from_value": 6000001,
+                "to_value": null,
+                "per_unit_amount": "0.000025",
+                "flat_amount": "0"
+              }
+            ]
+          }
+        },
+        {
+          "billable_metric_code": "concurrent_connections",
+          "charge_model": "graduated",
+          "properties": {
+            "graduated_ranges": [
+              {
+                "from_value": 0,
+                "to_value": 100,
+                "per_unit_amount": "0",
+                "flat_amount": "0"
+              },
+              {
+                "from_value": 101,
+                "to_value": null,
+                "per_unit_amount": "0.08",
+                "flat_amount": "0"
+              }
+            ]
+          }
+        }
+      ],
+      "minimum_commitment": null
+    }
+  ]
+}
