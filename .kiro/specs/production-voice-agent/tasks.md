@@ -313,7 +313,7 @@ This implementation plan transforms the existing prototype into a production-rea
 
 ## Phase 10: Customer Portal Backend
 
-- [-] 24. Portal API
+- [x] 24. Portal API
   - [x] 24.1 Create FastAPI portal service with Keycloak auth middleware
     - _Requirements: 21.1, 21.2_
 
@@ -342,29 +342,29 @@ This implementation plan transforms the existing prototype into a production-rea
 
 ## Phase 11: Customer Portal Frontend
 
-- [ ] 26. Portal UI
-  - [ ] 26.1 Set up Next.js 14 with TypeScript and Tailwind
+- [x] 26. Portal UI
+  - [x] 26.1 Set up Next.js 14 with TypeScript and Tailwind
     - _Requirements: 21.1, 21.10_
 
-  - [ ] 26.2 Implement dashboard page with usage charts
+  - [x] 26.2 Implement dashboard page with usage charts
     - _Requirements: 21.3_
 
-  - [ ] 26.3 Implement API keys management page
+  - [x] 26.3 Implement API keys management page
     - _Requirements: 21.4_
 
-  - [ ] 26.4 Implement usage analytics page
+  - [x] 26.4 Implement usage analytics page
     - _Requirements: 21.5_
 
-  - [ ] 26.5 Implement billing page (plans, invoices, payment methods)
+  - [x] 26.5 Implement billing page (plans, invoices, payment methods)
     - _Requirements: 21.6, 21.7_
 
-  - [ ] 26.6 Implement team management page
+  - [x] 26.6 Implement team management page
     - _Requirements: 21.9_
 
-  - [ ] 26.7 Implement settings page
+  - [x] 26.7 Implement settings page
     - _Requirements: 21.8_
 
-  - [ ] 26.8 Implement responsive design and WCAG 2.1 AA accessibility
+  - [x] 26.8 Implement responsive design and WCAG 2.1 AA accessibility
     - _Requirements: 21.10_
 
 - [ ] 27. Checkpoint - Portal Frontend

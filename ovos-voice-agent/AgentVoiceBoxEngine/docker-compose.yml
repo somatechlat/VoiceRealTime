@@ -348,6 +348,75 @@ services:
     networks:
       - voice-engine
 
+  # =============================================================================
+  # CUSTOMER PORTAL FRONTEND - Next.js 14 Self-Service Portal
+  # Dashboard, API keys, billing, team management, settings
+  # Requirements: 21.1, 21.3, 21.4, 21.5, 21.6, 21.7, 21.8, 21.9, 21.10
+  # =============================================================================
+  portal-frontend:
+    build:
+      context: ./portal-frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8001
+        NEXT_PUBLIC_KEYCLOAK_URL: http://localhost:8080
+        NEXT_PUBLIC_KEYCLOAK_REALM: agentvoicebox
+        NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: portal-frontend
+    image: agentvoicebox/portal-frontend:latest
+    environment:
+      PORTAL_API_URL: http://portal-api:8001
+    ports:
+      - "3002:3000"
+    depends_on:
+      - keycloak
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - voice-engine
+
+  # =============================================================================
+  # CUSTOMER PORTAL API - FastAPI Backend for Portal
+  # Requirements: 21.1, 21.2
+  # =============================================================================
+  portal-api:
+    build:
+      context: ..
+      dockerfile: AgentVoiceBoxEngine/Dockerfile
+    image: agentvoicebox/portal-api:latest
+    command: ["uvicorn", "portal.app:app", "--host", "0.0.0.0", "--port", "8001"]
+    env_file:
+      - ./settings.docker.env
+    environment:
+      DATABASE__URI: postgresql+psycopg://voice_agent:voice_agent@db:5432/voice_agent
+      REDIS__URL: redis://redis:6379/0
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: agentvoicebox
+      LAGO_API_URL: http://lago-api:3000
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      PAYPAL_CLIENT_ID: ${PAYPAL_CLIENT_ID:-}
+      PAYPAL_CLIENT_SECRET: ${PAYPAL_CLIENT_SECRET:-}
+    ports:
+      - "8001:8001"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - voice-engine
+
 volumes:
   pgdata:
   kafka-data:
