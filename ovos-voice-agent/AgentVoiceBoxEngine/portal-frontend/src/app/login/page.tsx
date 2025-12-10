@@ -14,11 +14,12 @@ function LoginPageContent() {
   const redirectUrl = searchParams.get("redirect") || "/dashboard";
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     setIsLoading(true);
     if (typeof window !== "undefined") {
       sessionStorage.setItem("auth_redirect", redirectUrl);
-      window.location.href = getLoginUrl();
+      const loginUrl = await getLoginUrl();
+      window.location.href = loginUrl;
     }
   };
 
