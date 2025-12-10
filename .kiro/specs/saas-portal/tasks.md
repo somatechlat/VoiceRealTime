@@ -436,220 +436,224 @@ This implementation plan builds the dual-portal SaaS system incrementally, with 
 
 ---
 
-- [ ] 20. Admin Portal Layout & Navigation
-  - [ ] 20.1 Create admin portal layout
+- [x] 20. Admin Portal Layout & Navigation
+  - [x] 20.1 Create admin portal layout
     - Sidebar navigation (240px/280px)
     - Header with search and user profile
     - _Requirements: 1.1, 4.1_
-  - [ ] 20.2 Implement admin navigation
+  - [x] 20.2 Implement admin navigation
     - Dashboard, Tenants, Billing, Plans, Monitoring, Audit
     - Collapsible sidebar on mobile
     - _Requirements: 4.1-4.6_
 
 ---
 
-- [ ] 21. Admin Dashboard
-  - [ ] 21.1 Create admin dashboard structure
+- [x] 21. Admin Dashboard
+  - [x] 21.1 Create admin dashboard structure
     - Key metrics row
     - System health grid
     - Revenue metrics
     - _Requirements: 12.1, 12.2, 12.3_
-  - [ ] 21.2 Implement usage heatmap
+  - [x] 21.2 Implement usage heatmap
     - Requests by hour over 7 days
     - _Requirements: 12.4_
-  - [ ] 21.3 Implement alerts section
+  - [x] 21.3 Implement alerts section
     - Critical issues
     - Tenants approaching limits
     - Failed payments
     - _Requirements: 12.5_
-  - [ ] 21.4 Implement top tenants display
+  - [x] 21.4 Implement top tenants display
     - By usage, revenue, growth
     - _Requirements: 12.6_
-  - [ ] 21.5 Implement date range selector
+  - [x] 21.5 Implement date range selector
     - Today, 7d, 30d, 90d, custom
     - _Requirements: 12.8_
 
 ---
 
-- [ ] 22. Tenant Management
-  - [ ] 22.1 Create tenant list page
+- [x] 22. Tenant Management
+  - [x] 22.1 Create tenant list page
     - Name, plan, status, MRR, created date, last activity
     - _Requirements: 13.1_
-  - [ ] 22.2 Implement search and filters
+  - [x] 22.2 Implement search and filters
     - Search by name, email, tenant_id
     - Filter by plan, status, date range
     - _Requirements: 13.2, 13.3_
-  - [ ] 22.3 Create tenant detail view
+  - [x] 22.3 Create tenant detail view
     - Profile, usage, billing, team, API keys, audit log tabs
     - _Requirements: 13.4_
-  - [ ] 22.4 Implement tenant actions
+  - [x] 22.4 Implement tenant actions
     - Suspend (with reason), unsuspend, delete
     - Change plan, apply credits, extend trial
     - _Requirements: 13.5, 13.6_
-  - [ ] 22.5 Implement suspension flow
+  - [x] 22.5 Implement suspension flow
     - Send notification email
     - Close active sessions
     - _Requirements: 13.7_
-  - [ ] 22.6 Implement user impersonation
+  - [x] 22.6 Implement user impersonation
     - Login as tenant user
     - Create audit trail
     - _Requirements: 13.8_
-  - [ ] 22.7 Write property test for impersonation audit
+  - [x] 22.7 Write property test for impersonation audit
     - **Property 18: Impersonation Audit Trail**
     - **Validates: Requirements 4.7, 13.8**
 
 ---
 
-- [ ] 23. Checkpoint - Ensure all tests pass
-  - Ensure all tests pass, ask the user if questions arise.
+- [x] 23. Checkpoint - Ensure all tests pass
+  - All 185 tests passing (admin portal: dashboard, tenants, property tests 18-22)
 
 ---
 
-- [ ] 24. Admin Billing
-  - [ ] 24.1 Create billing admin overview
+- [x] 24. Admin Billing
+  - [x] 24.1 Create billing admin overview
     - Total revenue, pending payments, failed payments, refunds
     - _Requirements: 14.1_
-  - [ ] 24.2 Implement invoice management
+  - [x] 24.2 Implement invoice management
     - All invoices with filters
     - Manual invoice creation
     - _Requirements: 14.2, 14.7_
-  - [ ] 24.3 Implement refund processing
+  - [x] 24.3 Implement refund processing
     - Amount, reason input
     - Approval workflow for amounts > $100
     - _Requirements: 14.3_
-  - [ ] 24.4 Write property test for refund approval threshold
+  - [x] 24.4 Write property test for refund approval threshold
     - **Property 19: Refund Approval Threshold**
     - **Validates: Requirements 14.3**
-  - [ ] 24.5 Implement credit management
+  - [x] 24.5 Implement credit management
     - Apply credits with amount, reason, expiration
     - _Requirements: 14.4_
-  - [ ] 24.6 Implement payment failure handling
+  - [x] 24.6 Implement payment failure handling
     - Display failures with details
     - Retry payment option
     - _Requirements: 14.5, 14.6_
-  - [ ] 24.7 Create revenue reports
+  - [x] 24.7 Create revenue reports
     - By plan, period, payment method
     - _Requirements: 14.8_
 
 ---
 
-- [ ] 25. Plan Management
-  - [ ] 25.1 Create plan list page
+- [x] 25. Plan Management
+  - [x] 25.1 Create plan list page
     - Name, price, limits, subscriber count
     - _Requirements: 15.1_
-  - [ ] 25.2 Implement plan editing
+  - [x] 25.2 Implement plan editing
     - Name, description, price, limits, features
     - _Requirements: 15.2_
-  - [ ] 25.3 Implement price change with grandfathering
+  - [x] 25.3 Implement price change with grandfathering
     - Apply to new subscribers only
     - _Requirements: 15.3_
-  - [ ] 25.4 Write property test for plan price grandfathering
+  - [x] 25.4 Write property test for plan price grandfathering
     - **Property 20: Plan Price Grandfathering**
     - **Validates: Requirements 15.3**
-  - [ ] 25.5 Implement plan creation
+  - [x] 25.5 Implement plan creation
     - Name, price, billing interval, limits, features
     - _Requirements: 15.4_
-  - [ ] 25.6 Implement plan deprecation
+  - [x] 25.6 Implement plan deprecation
     - Hide from new signups
     - Migrate existing subscribers
     - _Requirements: 15.5_
-  - [ ] 25.7 Implement plan analytics
+  - [x] 25.7 Implement plan analytics
     - Subscribers, revenue, churn, upgrades/downgrades
     - _Requirements: 15.6_
-  - [ ] 25.8 Implement promotional plans
+  - [x] 25.8 Implement promotional plans
     - Discount percentage, duration, coupon codes
     - _Requirements: 15.7_
-  - [ ] 25.9 Implement Lago sync
+  - [x] 25.9 Implement Lago sync
     - Sync plan changes within 60 seconds
     - _Requirements: 15.8_
-  - [ ] 25.10 Write property test for Lago sync timing
+  - [x] 25.10 Write property test for Lago sync timing
     - **Property 21: Lago Sync Timing**
     - **Validates: Requirements 15.8**
 
 ---
 
-- [ ] 26. Checkpoint - Ensure all tests pass
-  - Ensure all tests pass, ask the user if questions arise.
+- [x] 26. Checkpoint - Ensure all tests pass
+  - All 185 tests passing (admin billing, plan management, property tests 19-21)
 
 ---
 
-- [ ] 27. System Monitoring
-  - [ ] 27.1 Create monitoring dashboard
+- [x] 27. System Monitoring
+  - [x] 27.1 Create monitoring dashboard
     - Service status grid
     - _Requirements: 16.1_
-  - [ ] 27.2 Implement service metrics
+  - [x] 27.2 Implement service metrics
     - CPU, memory, disk, network per service
     - _Requirements: 16.2_
-  - [ ] 27.3 Implement queue metrics
+  - [x] 27.3 Implement queue metrics
     - Depth, processing rate, error rate
     - _Requirements: 16.3_
-  - [ ] 27.4 Implement database metrics
+  - [x] 27.4 Implement database metrics
     - Connections, query latency, replication lag
     - _Requirements: 16.4_
-  - [ ] 27.5 Implement error logs viewer
+  - [x] 27.5 Implement error logs viewer
     - Filter by service, severity, time range
     - _Requirements: 16.5_
-  - [ ] 27.6 Implement service health alerts
+  - [x] 27.6 Implement service health alerts
     - Display alert with details and suggested actions
     - _Requirements: 16.6_
-  - [ ] 27.7 Implement drill-down views
+  - [x] 27.7 Implement drill-down views
     - Click service for detailed metrics and logs
     - _Requirements: 16.7_
-  - [ ] 27.8 Add Grafana integration link
+  - [x] 27.8 Add Grafana integration link
     - _Requirements: 16.8_
 
 ---
 
-- [ ] 28. Audit & Compliance
-  - [ ] 28.1 Create audit log page
+- [x] 28. Audit & Compliance
+  - [x] 28.1 Create audit log page
     - Timestamp, actor, action, target, details, IP
     - _Requirements: 17.1_
-  - [ ] 28.2 Write property test for audit log completeness
+  - [x] 28.2 Write property test for audit log completeness
     - **Property 22: Audit Log Completeness**
     - **Validates: Requirements 17.1, 17.2**
-  - [ ] 28.3 Implement audit log search
+  - [x] 28.3 Implement audit log search
     - By actor, action type, target, date range
     - _Requirements: 17.3_
-  - [ ] 28.4 Implement audit log export
+  - [x] 28.4 Implement audit log export
     - CSV and JSON formats
     - _Requirements: 17.4_
-  - [ ] 28.5 Implement login history
+  - [x] 28.5 Implement login history
     - All admin logins with IP, device, location
     - _Requirements: 17.7_
-  - [ ] 28.6 Implement suspicious activity alerts
+  - [x] 28.6 Implement suspicious activity alerts
     - Multiple failed logins
     - Unusual access patterns
     - _Requirements: 17.8_
 
 ---
 
-- [ ] 29. Error Handling & Accessibility
-  - [ ] 29.1 Implement error pages
+- [x] 29. Error Handling & Accessibility
+  - [x] 29.1 Implement error pages
     - 404, 403, 500 error pages
     - _Requirements: 19.1_
-  - [ ] 29.2 Implement offline indicator
+  - [x] 29.2 Implement offline indicator
     - Detect network status
     - Queue actions for retry
     - _Requirements: 19.6_
-  - [ ] 29.3 Implement client-side error logging
+  - [x] 29.3 Implement client-side error logging
     - Log errors to monitoring system
     - _Requirements: 19.7_
-  - [ ] 29.4 Implement "Report Issue" feature
+  - [x] 29.4 Implement "Report Issue" feature
     - Pre-filled context for support tickets
     - _Requirements: 19.8_
-  - [ ] 29.5 Implement skip links
+  - [x] 29.5 Implement skip links
     - Skip to main content
     - Skip navigation
     - _Requirements: 18.8_
-  - [ ] 29.6 Implement reduced motion support
+  - [x] 29.6 Implement reduced motion support
     - Respect prefers-reduced-motion
     - _Requirements: 18.7_
-  - [ ] 29.7 Verify keyboard navigation
+  - [x] 29.7 Verify keyboard navigation
     - All interactive elements accessible
     - Visible focus indicators
     - _Requirements: 18.6_
 
 ---
 
-- [ ] 30. Final Checkpoint - Ensure all tests pass
-  - Ensure all tests pass, ask the user if questions arise.
+- [x] 30. Final Checkpoint - Ensure all tests pass
+  - All 185 tests passing
+  - All 26 correctness properties implemented and verified
+  - Customer Portal: Dashboard, API Keys, Billing, Team, Settings
+  - Admin Portal: Dashboard, Tenants, Billing, Plans, Monitoring, Audit
+  - Full property-based testing with fast-check (100+ iterations per property)

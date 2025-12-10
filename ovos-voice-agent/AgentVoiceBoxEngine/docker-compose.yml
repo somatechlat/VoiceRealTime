@@ -31,11 +31,11 @@
 #   25004 - Keycloak
 #   25005 - Lago API
 #   25006 - Lago Frontend
-#   25007 - Portal Frontend
+#   25007 - Portal Frontend (SaaS Portal - Main UI)
 #   25008 - Prometheus
 #   25009 - Grafana
 #   25010 - OVOS Messagebus
-#   25011 - Admin UI (static HTML files)
+#   (25011 - REMOVED: Legacy admin-ui replaced by portal-frontend)
 # =============================================================================
 
 x-logging: &logging
@@ -509,36 +509,13 @@ services:
       - agentvoicebox-net
 
   # ===========================================================================
-  # ADMIN UI - Static HTML Files Server
+  # ADMIN UI - REMOVED (Replaced by portal-frontend SaaS Portal)
   # ===========================================================================
-
-  admin-ui:
-    image: nginx:alpine
-    container_name: agentvoicebox_admin-ui
-    hostname: admin-ui
-    ports:
-      - "25011:80"
-    volumes:
-      - ../advanced-voice.html:/usr/share/nginx/html/advanced-voice.html:ro
-      - ../simple-chat.html:/usr/share/nginx/html/simple-chat.html:ro
-      - ../test-ovos.html:/usr/share/nginx/html/test-ovos.html:ro
-      - ../test-ovos.html:/usr/share/nginx/html/index.html:ro
-    deploy:
-      resources:
-        limits:
-          memory: 64M
-        reservations:
-          memory: 32M
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    logging: *logging
-    restart: unless-stopped
-    networks:
-      - agentvoicebox-net
+  # The legacy static HTML admin-ui has been replaced by the full-featured
+  # portal-frontend Next.js application at port 25007.
+  # 
+  # Access the portal at: http://localhost:25007
+  # ===========================================================================
 
 # =============================================================================
 # VOLUMES

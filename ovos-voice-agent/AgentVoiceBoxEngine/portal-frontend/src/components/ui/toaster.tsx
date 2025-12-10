@@ -20,7 +20,7 @@ export function Toaster() {
         return (
           <Toast key={id} variant={variant} {...props}>
             <div className="flex gap-3">
-              <ToastIcon variant={variant} />
+              <ToastIcon variant={variant ?? undefined} />
               <div className="grid gap-1">
                 {title && <ToastTitle>{title}</ToastTitle>}
                 {description && <ToastDescription>{description}</ToastDescription>}

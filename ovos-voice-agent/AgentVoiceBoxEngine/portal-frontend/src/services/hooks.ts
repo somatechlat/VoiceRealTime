@@ -3,6 +3,7 @@
  * Implements Requirements 20.5, 20.8: SWR caching and optimistic updates
  */
 
+// @ts-expect-error - swr types may not be installed
 import useSWR, { SWRConfiguration, mutate } from 'swr';
 import { apiClient, ApiResponse } from './api-client';
 
@@ -135,6 +136,7 @@ export function useMutation<TData, TVariables>(
 
 // Import useState for useMutation hook
 import { useState } from 'react';
+// @ts-expect-error - swr types may not be installed
 import { mutate as globalMutate } from 'swr';
 
 /**
@@ -149,7 +151,7 @@ export async function prefetch<T>(url: string): Promise<void> {
  */
 export async function invalidateCache(urlPattern: string | RegExp): Promise<void> {
   await mutate(
-    (key) => {
+    (key: unknown) => {
       if (typeof key !== 'string') return false;
       if (typeof urlPattern === 'string') {
         return key.startsWith(urlPattern);

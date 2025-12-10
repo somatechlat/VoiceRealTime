@@ -238,7 +238,7 @@ describe('Property 26: Currency Locale Formatting', () => {
     noDefaultInfinity: true,
   });
 
-  const currencyArbitrary = fc.constantFrom('USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD');
+  const currencyArbitrary = fc.constantFrom('USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD') as fc.Arbitrary<'USD' | 'EUR' | 'GBP' | 'JPY' | 'CAD' | 'AUD'>;
   const localeArbitrary = fc.constantFrom('en-US', 'en-GB', 'de-DE', 'fr-FR', 'ja-JP');
 
   it('should format any amount as currency', () => {
@@ -257,7 +257,7 @@ describe('Property 26: Currency Locale Formatting', () => {
   it('should include currency symbol', () => {
     fc.assert(
       fc.property(amountArbitrary, currencyArbitrary, (amount, currency) => {
-        const formatted = formatCurrency(amount, { currency, locale: 'en-US' });
+        const formatted = formatCurrency(amount, { currency: currency, locale: 'en-US' });
         
         // Should contain some currency indicator
         // (symbol position varies by locale)

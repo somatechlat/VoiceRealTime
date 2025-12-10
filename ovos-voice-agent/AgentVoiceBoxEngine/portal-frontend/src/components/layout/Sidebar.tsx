@@ -12,6 +12,8 @@ import {
   HelpCircle,
   LogOut,
   Mic,
+  Phone,
+  FolderKanban,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -30,6 +32,8 @@ interface NavItem {
 
 const navigation: NavItem[] = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Sessions", href: "/sessions", icon: Phone, permission: "usage:view" },
+  { name: "Projects", href: "/projects", icon: FolderKanban, permission: "api_keys:view" },
   { name: "API Keys", href: "/api-keys", icon: Key, permission: "api_keys:view" },
   { name: "Usage", href: "/usage", icon: BarChart3, permission: "usage:view" },
   { name: "Billing", href: "/billing", icon: CreditCard, permission: "billing:view" },

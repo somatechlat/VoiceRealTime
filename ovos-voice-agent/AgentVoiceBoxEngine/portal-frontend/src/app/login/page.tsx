@@ -5,7 +5,7 @@
  * Implements Requirements 2.1, 2.3: Authentication with email/password and social login
  */
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, Mail, Lock, Loader2 } from "lucide-react";
@@ -17,7 +17,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { MfaVerification } from "@/components/auth/mfa-verification";
 import { authService } from "@/services/auth-service";
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectUrl = searchParams.get("redirect") || "/dashboard";
@@ -311,5 +311,20 @@ export default function LoginPage() {
         <p>© 2024 AgentVoiceBox. All rights reserved.</p>
       </footer>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center">
+          <div className="mb-4 h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto" />
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    }>
+      <LoginPageContent />
+    </Suspense>
   );
 }
