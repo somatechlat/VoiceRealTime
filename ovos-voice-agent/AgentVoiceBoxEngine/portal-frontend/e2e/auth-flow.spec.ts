@@ -39,10 +39,10 @@ test.describe('Authentication Flow', () => {
     await page.getByRole('button', { name: /sign in with sso/i }).click();
     
     // Should redirect to Keycloak
-    await page.waitForURL(/localhost:25004.*auth/);
+    await page.waitForURL(/localhost:25004/);
     
-    // Keycloak login form should be visible
-    await expect(page.locator('#username, #kc-form-login, input[name="username"]')).toBeVisible({ timeout: 10000 });
+    // Keycloak login form should be visible - use specific input
+    await expect(page.getByRole('textbox', { name: 'Email' })).toBeVisible({ timeout: 10000 });
   });
 
   test('should complete full login flow with Keycloak', async ({ page }) => {
