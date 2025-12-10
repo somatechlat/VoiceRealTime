@@ -1,22 +1,38 @@
 "use client";
 
+/**
+ * Login Page
+ * Implements Requirements 2.1, 2.3: Authentication with email/password and social login
+ */
+
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, Mail, Lock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ThemeToggleSimple } from "@/components/ui/theme-toggle";
 import { useAuth } from "@/contexts/AuthContext";
+import { MfaVerification } from "@/components/auth/mfa-verification";
+import { authService } from "@/services/auth-service";
 
 export default function LoginPage() {
-  const { login, isLoading: authLoading } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectUrl = searchParams.get("redirect") || "/dashboard";
+  
+  const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // MFA state
+  const [showMfa, setShowMfa] = useState(false);
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,26 +40,81 @@ export default function LoginPage() {
     setIsSubmitting(true);
 
     try {
-      // For Keycloak, we redirect to the login URL
-      // The actual authentication happens on Keycloak's side
-      login(window.location.origin + "/dashboard");
+      const result = await login({
+        email,
+        password,
+        rememberMe,
+      });
+
+      if (result.success) {
+        // Redirect to dashboard or requested page
+        router.push(redirectUrl);
+      } else if (result.requiresMfa && result.mfaToken) {
+        // Show MFA verification
+        setMfaToken(result.mfaToken);
+        setShowMfa(true);
+      } else {
+        setError(result.error || "Invalid email or password");
+      }
     } catch {
       setError("An error occurred. Please try again.");
+    } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleSocialLogin = (provider: "google" | "github") => {
-    // Keycloak handles social login through identity provider configuration
-    // This would redirect to Keycloak with the appropriate IDP hint
-    const keycloakUrl = process.env.NEXT_PUBLIC_KEYCLOAK_URL || "http://localhost:25004";
-    const realm = process.env.NEXT_PUBLIC_KEYCLOAK_REALM || "agentvoicebox";
-    const clientId = process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID || "portal-frontend";
-    const redirectUri = encodeURIComponent(window.location.origin + "/auth/callback");
-    
-    const url = `${keycloakUrl}/realms/${realm}/protocol/openid-connect/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=openid%20profile%20email&kc_idp_hint=${provider}`;
-    window.location.href = url;
+  const handleMfaVerify = async (code: string): Promise<{ success: boolean; error?: string }> => {
+    if (!mfaToken) {
+      return { success: false, error: "MFA session expired" };
+    }
+
+    try {
+      const result = await authService.verifyMfa({
+        mfaToken,
+        code,
+      });
+
+      if (result.success) {
+        router.push(redirectUrl);
+        return { success: true };
+      } else {
+        return { success: false, error: result.error || "Invalid code" };
+      }
+    } catch {
+      return { success: false, error: "Verification failed" };
+    }
   };
+
+  const handleMfaCancel = () => {
+    setShowMfa(false);
+    setMfaToken(null);
+    setPassword("");
+  };
+
+  const handleSocialLogin = (provider: "google" | "github") => {
+    // Redirect to backend OAuth endpoint
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || "";
+    const redirectUri = encodeURIComponent(window.location.origin + "/auth/callback");
+    window.location.href = `${baseUrl}/api/auth/oauth/${provider}?redirect_uri=${redirectUri}`;
+  };
+
+  // Show MFA verification if required
+  if (showMfa && mfaToken) {
+    return (
+      <div className="min-h-screen flex flex-col bg-gradient-to-br from-background via-background to-muted/30">
+        <div className="absolute top-4 right-4">
+          <ThemeToggleSimple />
+        </div>
+        <div className="flex-1 flex items-center justify-center p-4">
+          <MfaVerification
+            mfaToken={mfaToken}
+            onVerify={handleMfaVerify}
+            onCancel={handleMfaCancel}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-background via-background to-muted/30">
@@ -160,7 +231,7 @@ export default function LoginPage() {
               <Button
                 type="submit"
                 className="w-full h-11 font-medium"
-                disabled={isSubmitting || authLoading}
+                disabled={isSubmitting}
               >
                 {isSubmitting ? (
                   <>
@@ -228,7 +299,7 @@ export default function LoginPage() {
           {/* Sign up link */}
           <p className="text-center text-sm text-muted-foreground mt-6">
             Don&apos;t have an account?{" "}
-            <Link href="/signup" className="text-primary hover:text-primary/80 font-medium transition-colors">
+            <Link href="/register" className="text-primary hover:text-primary/80 font-medium transition-colors">
               Sign up
             </Link>
           </p>
