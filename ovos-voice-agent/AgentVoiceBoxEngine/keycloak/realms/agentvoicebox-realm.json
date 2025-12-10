@@ -3,7 +3,7 @@
   "enabled": true,
   "displayName": "AgentVoiceBox",
   "displayNameHtml": "<strong>AgentVoiceBox</strong>",
-  "sslRequired": "external",
+  "sslRequired": "none",
   "registrationAllowed": true,
   "registrationEmailAsUsername": true,
   "rememberMe": true,
@@ -194,10 +194,12 @@
       "protocol": "openid-connect",
       "redirectUris": [
         "http://localhost:3000/*",
+        "http://localhost:25007/*",
         "https://portal.agentvoicebox.com/*"
       ],
       "webOrigins": [
         "http://localhost:3000",
+        "http://localhost:25007",
         "https://portal.agentvoicebox.com"
       ],
       "defaultClientScopes": [
@@ -208,7 +210,37 @@
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256"
-      }
+      },
+      "protocolMappers": [
+        {
+          "name": "tenant_id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "tenant_id",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "tenant_id",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "realm_roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "userinfo.token.claim": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "roles",
+            "jsonType.label": "String"
+          }
+        }
+      ]
     }
   ],
   "defaultDefaultClientScopes": [
@@ -295,6 +327,25 @@
       "realmRoles": ["developer"],
       "attributes": {
         "tenant_id": ["00000000-0000-0000-0000-000000000001"]
+      }
+    },
+    {
+      "username": "demo@test.com",
+      "email": "demo@test.com",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Demo",
+      "lastName": "User",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["tenant_admin"],
+      "attributes": {
+        "tenant_id": ["00000000-0000-0000-0000-000000000002"]
       }
     }
   ],

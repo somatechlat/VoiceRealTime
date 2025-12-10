@@ -12,6 +12,7 @@ const PUBLIC_ROUTES = [
   '/register',
   '/forgot-password',
   '/reset-password',
+  '/auth/callback',
   '/api/auth/login',
   '/api/auth/register',
   '/api/auth/refresh',

@@ -163,7 +163,9 @@ services:
       KC_DB_PASSWORD: agentvoicebox_secure_2024
       KC_HOSTNAME_STRICT: "false"
       KC_HEALTH_ENABLED: "true"
-      JAVA_OPTS_APPEND: "-Xms256m -Xmx384m"
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      JAVA_OPTS_APPEND: "-Xms512m -Xmx768m -Dkeycloak.profile.feature.admin2=enabled"
     ports:
       - "25004:8080"
     volumes:
@@ -171,9 +173,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 1024M
         reservations:
-          memory: 256M
+          memory: 512M
     depends_on:
       postgres:
         condition: service_healthy
@@ -283,7 +285,7 @@ services:
       dockerfile: Dockerfile
     container_name: agentvoicebox_portal-api
     hostname: portal-api
-    command: ["gunicorn", "--bind", "0.0.0.0:8001", "--workers", "1", "--worker-class", "gevent", "--timeout", "60", "portal.app:app"]
+    command: ["uvicorn", "portal.app:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "1"]
     environment:
       FLASK_ENV: production
       APP_SECRET_KEY: change-me-in-production
@@ -324,7 +326,7 @@ services:
         NEXT_PUBLIC_API_URL: http://localhost:25001
         NEXT_PUBLIC_KEYCLOAK_URL: http://localhost:25004
         NEXT_PUBLIC_KEYCLOAK_REALM: agentvoicebox
-        NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: portal-frontend
+        NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: agentvoicebox-portal
     container_name: agentvoicebox_portal-frontend
     hostname: portal-frontend
     ports:

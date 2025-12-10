@@ -10,7 +10,7 @@ const nextConfig = {
     // Keycloak (port 25004)
     NEXT_PUBLIC_KEYCLOAK_URL: process.env.NEXT_PUBLIC_KEYCLOAK_URL || "http://localhost:25004",
     NEXT_PUBLIC_KEYCLOAK_REALM: process.env.NEXT_PUBLIC_KEYCLOAK_REALM || "agentvoicebox",
-    NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID || "portal-frontend",
+    NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID || "agentvoicebox-portal",
     // Lago Billing (port 25005)
     NEXT_PUBLIC_LAGO_URL: process.env.NEXT_PUBLIC_LAGO_URL || "http://localhost:25005",
     // Prometheus (port 25008)
