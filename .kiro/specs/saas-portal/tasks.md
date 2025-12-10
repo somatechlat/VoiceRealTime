@@ -92,34 +92,34 @@ This implementation plan builds the dual-portal SaaS system incrementally, with 
 
 ---
 
-- [ ] 5. Data Serialization & API Client
-  - [ ] 5.1 Implement API client with retry logic
+- [x] 5. Data Serialization & API Client
+  - [x] 5.1 Implement API client with retry logic
     - Create get, post, put, delete methods
     - Implement exponential backoff (1s, 2s, 4s delays)
     - Add request/response interceptors
     - _Requirements: 20.4_
-  - [ ] 5.2 Write property test for retry with exponential backoff
+  - [x] 5.2 Write property test for retry with exponential backoff
     - **Property 25: Retry with Exponential Backoff**
     - **Validates: Requirements 20.4**
-  - [ ] 5.3 Implement JSON serialization utilities
+  - [x] 5.3 Implement JSON serialization utilities
     - Create serialize/deserialize functions
     - Handle Date objects with ISO 8601 format
     - Add Zod schema validation
     - _Requirements: 20.1, 20.2, 20.3_
-  - [ ] 5.4 Write property test for JSON round-trip
+  - [x] 5.4 Write property test for JSON round-trip
     - **Property 23: JSON Serialization Round-Trip**
     - **Validates: Requirements 20.1**
-  - [ ] 5.5 Write property test for ISO 8601 date format
+  - [x] 5.5 Write property test for ISO 8601 date format
     - **Property 24: ISO 8601 Date Format**
     - **Validates: Requirements 20.2**
-  - [ ] 5.6 Implement currency formatting utility
+  - [x] 5.6 Implement currency formatting utility
     - Format according to user locale
     - Support multiple currencies
     - _Requirements: 20.6_
-  - [ ] 5.7 Write property test for currency locale formatting
+  - [x] 5.7 Write property test for currency locale formatting
     - **Property 26: Currency Locale Formatting**
     - **Validates: Requirements 20.6**
-  - [ ] 5.8 Implement SWR data fetching hooks
+  - [x] 5.8 Implement SWR data fetching hooks
     - Create useFetch hook with caching
     - Implement stale-while-revalidate pattern
     - Add optimistic updates support
@@ -127,7 +127,7 @@ This implementation plan builds the dual-portal SaaS system incrementally, with 
 
 ---
 
-- [ ] 6. Checkpoint - Ensure all tests pass
+- [x] 6. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ---
