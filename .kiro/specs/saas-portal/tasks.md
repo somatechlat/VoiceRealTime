@@ -53,38 +53,38 @@ This implementation plan builds the dual-portal SaaS system incrementally, with 
 
 ---
 
-- [ ] 3. Checkpoint - Ensure all tests pass
+- [x] 3. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ---
 
-- [ ] 4. Core UI Components
-  - [ ] 4.1 Implement Button component
+- [x] 4. Core UI Components
+  - [x] 4.1 Implement Button component
     - Create variants: primary, secondary, ghost, danger
     - Add sizes: sm, md, lg
     - Implement loading and disabled states
     - _Requirements: 6.4_
-  - [ ] 4.2 Implement Card component
+  - [x] 4.2 Implement Card component
     - Create default and accent variants
     - Apply theme-appropriate border radius (12px dark, 16-20px light)
     - Add hover state transitions
     - _Requirements: 6.5_
-  - [ ] 4.3 Implement MetricCard component (Verve style)
+  - [x] 4.3 Implement MetricCard component (Verve style)
     - Display large bold number with muted label
     - Add optional percentage change badge
     - Support accent background variant
     - _Requirements: 7.2, 7.3, 7.4_
-  - [ ] 4.4 Implement Input component
+  - [x] 4.4 Implement Input component
     - Create text, email, password, number types
     - Add icon support and password toggle
     - Implement inline error display
     - _Requirements: 19.3_
-  - [ ] 4.5 Implement Toast notification system
+  - [x] 4.5 Implement Toast notification system
     - Create success, warning, error, info variants
     - Add auto-dismiss with configurable duration
     - Support action buttons
     - _Requirements: 19.2_
-  - [ ] 4.6 Write unit tests for UI components
+  - [x] 4.6 Write unit tests for UI components
     - Test Button variants and states
     - Test Card rendering and hover states
     - Test Input validation display
