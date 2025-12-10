@@ -167,28 +167,28 @@ This implementation plan builds the dual-portal SaaS system incrementally, with 
 
 ---
 
-- [ ] 8. Authorization & RBAC
-  - [ ] 8.1 Implement permission system
+- [x] 8. Authorization & RBAC
+  - [x] 8.1 Implement permission system
     - Define CustomerRole and AdminRole types
     - Create permission mappings for each role
     - Implement permission union for multiple roles
     - _Requirements: 3.1-3.6, 4.1-4.6_
-  - [ ] 8.2 Write property test for role permission union
+  - [x] 8.2 Write property test for role permission union
     - **Property 7: Role Permission Union**
     - **Validates: Requirements 3.7**
-  - [ ] 8.3 Implement route guards
+  - [x] 8.3 Implement route guards
     - Create middleware for route protection
     - Check permissions on every request
     - Return 403 for unauthorized access
     - _Requirements: 2.7, 2.8_
-  - [ ] 8.4 Write property test for RBAC permission check
+  - [x] 8.4 Write property test for RBAC permission check
     - **Property 6: RBAC Permission Check**
     - **Validates: Requirements 2.7**
-  - [ ] 8.5 Implement portal separation
+  - [x] 8.5 Implement portal separation
     - Enforce customer users cannot access admin routes
     - Validate realm on authentication
     - _Requirements: 1.2, 1.3, 1.4_
-  - [ ] 8.6 Write property test for portal route separation
+  - [x] 8.6 Write property test for portal route separation
     - **Property 1: Portal Route Separation**
     - **Validates: Requirements 1.4, 2.8**
 
