@@ -1,0 +1,655 @@
+# Implementation Plan
+
+## AgentVoiceBox SaaS Portal
+
+This implementation plan builds the dual-portal SaaS system incrementally, with property-based tests validating correctness at each stage.
+
+---
+
+- [ ] 1. Project Setup & Core Infrastructure
+  - [ ] 1.1 Initialize Next.js 14 project with App Router and TypeScript
+    - Configure tsconfig.json with strict mode
+    - Set up path aliases (@/components, @/services, @/lib)
+    - Install dependencies: tailwindcss, lucide-react, swr, zod
+    - _Requirements: 1.7_
+  - [ ] 1.2 Set up testing infrastructure
+    - Install vitest, @testing-library/react, fast-check
+    - Configure vitest.config.ts with jsdom environment
+    - Create test utilities and setup files
+    - _Requirements: Testing Strategy_
+  - [ ] 1.3 Create base folder structure
+    - Set up src/app/(auth), (customer), (admin) route groups
+    - Create src/components/ui, src/services, src/lib directories
+    - Create src/__tests__/unit and src/__tests__/properties directories
+    - _Requirements: 1.1, 1.6_
+
+---
+
+- [ ] 2. Theme System Implementation
+  - [ ] 2.1 Implement ThemeContext with light/dark/system modes
+    - Create ThemeProvider with localStorage persistence
+    - Implement OS preference detection via matchMedia
+    - Apply theme class to document element
+    - _Requirements: 5.1, 5.2, 5.7_
+  - [ ] 2.2 Write property test for theme persistence
+    - **Property 8: Theme Persistence**
+    - **Validates: Requirements 5.2**
+  - [ ] 2.3 Write property test for system theme detection
+    - **Property 9: System Theme Detection**
+    - **Validates: Requirements 5.7**
+  - [ ] 2.4 Implement CSS custom properties for both themes
+    - Define dark theme variables (background #0a0a0f, card #111118, etc.)
+    - Define light theme variables (background #f5f7f5, card #ffffff, etc.)
+    - Add Verve-style accent colors for light theme
+    - _Requirements: 5.3, 5.4, 5.5_
+  - [ ] 2.5 Create ThemeToggle component
+    - Implement dropdown variant with Light/Dark/System options
+    - Implement compact sun/moon button variant
+    - Ensure keyboard accessibility and ARIA labels
+    - _Requirements: 5.8_
+  - [ ] 2.6 Write property test for WCAG contrast compliance
+    - **Property 10: WCAG Contrast Compliance**
+    - **Validates: Requirements 5.6, 18.6**
+
+---
+
+- [ ] 3. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+---
+
+- [ ] 4. Core UI Components
+  - [ ] 4.1 Implement Button component
+    - Create variants: primary, secondary, ghost, danger
+    - Add sizes: sm, md, lg
+    - Implement loading and disabled states
+    - _Requirements: 6.4_
+  - [ ] 4.2 Implement Card component
+    - Create default and accent variants
+    - Apply theme-appropriate border radius (12px dark, 16-20px light)
+    - Add hover state transitions
+    - _Requirements: 6.5_
+  - [ ] 4.3 Implement MetricCard component (Verve style)
+    - Display large bold number with muted label
+    - Add optional percentage change badge
+    - Support accent background variant
+    - _Requirements: 7.2, 7.3, 7.4_
+  - [ ] 4.4 Implement Input component
+    - Create text, email, password, number types
+    - Add icon support and password toggle
+    - Implement inline error display
+    - _Requirements: 19.3_
+  - [ ] 4.5 Implement Toast notification system
+    - Create success, warning, error, info variants
+    - Add auto-dismiss with configurable duration
+    - Support action buttons
+    - _Requirements: 19.2_
+  - [ ] 4.6 Write unit tests for UI components
+    - Test Button variants and states
+    - Test Card rendering and hover states
+    - Test Input validation display
+    - _Requirements: 6.1-6.8_
+
+---
+
+- [ ] 5. Data Serialization & API Client
+  - [ ] 5.1 Implement API client with retry logic
+    - Create get, post, put, delete methods
+    - Implement exponential backoff (1s, 2s, 4s delays)
+    - Add request/response interceptors
+    - _Requirements: 20.4_
+  - [ ] 5.2 Write property test for retry with exponential backoff
+    - **Property 25: Retry with Exponential Backoff**
+    - **Validates: Requirements 20.4**
+  - [ ] 5.3 Implement JSON serialization utilities
+    - Create serialize/deserialize functions
+    - Handle Date objects with ISO 8601 format
+    - Add Zod schema validation
+    - _Requirements: 20.1, 20.2, 20.3_
+  - [ ] 5.4 Write property test for JSON round-trip
+    - **Property 23: JSON Serialization Round-Trip**
+    - **Validates: Requirements 20.1**
+  - [ ] 5.5 Write property test for ISO 8601 date format
+    - **Property 24: ISO 8601 Date Format**
+    - **Validates: Requirements 20.2**
+  - [ ] 5.6 Implement currency formatting utility
+    - Format according to user locale
+    - Support multiple currencies
+    - _Requirements: 20.6_
+  - [ ] 5.7 Write property test for currency locale formatting
+    - **Property 26: Currency Locale Formatting**
+    - **Validates: Requirements 20.6**
+  - [ ] 5.8 Implement SWR data fetching hooks
+    - Create useFetch hook with caching
+    - Implement stale-while-revalidate pattern
+    - Add optimistic updates support
+    - _Requirements: 20.5, 20.8_
+
+---
+
+- [ ] 6. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+---
+
+- [ ] 7. Authentication System
+  - [ ] 7.1 Implement AuthService interface
+    - Create login, logout, refreshToken methods
+    - Implement getCurrentUser and hasPermission
+    - Handle MFA flow
+    - _Requirements: 2.1, 2.3_
+  - [ ] 7.2 Implement JWT token handling
+    - Parse and validate JWT claims
+    - Extract user_id, tenant_id, roles, permissions
+    - Store tokens in httpOnly cookies
+    - _Requirements: 2.2_
+  - [ ] 7.3 Write property test for JWT token claims
+    - **Property 2: JWT Token Claims Completeness**
+    - **Validates: Requirements 2.2**
+  - [ ] 7.4 Implement session management
+    - Track idle time and total session time
+    - Implement automatic logout on timeout
+    - Handle token refresh
+    - _Requirements: 2.5, 2.6_
+  - [ ] 7.5 Write property test for session timeout
+    - **Property 4: Session Timeout Enforcement**
+    - **Validates: Requirements 2.5**
+  - [ ] 7.6 Write property test for token refresh
+    - **Property 5: Token Refresh Transparency**
+    - **Validates: Requirements 2.6**
+  - [ ] 7.7 Implement MFA handling
+    - Detect MFA requirement from login response
+    - Create MFA verification flow
+    - _Requirements: 2.4_
+  - [ ] 7.8 Write property test for MFA enforcement
+    - **Property 3: MFA Enforcement**
+    - **Validates: Requirements 2.4**
+
+---
+
+- [ ] 8. Authorization & RBAC
+  - [ ] 8.1 Implement permission system
+    - Define CustomerRole and AdminRole types
+    - Create permission mappings for each role
+    - Implement permission union for multiple roles
+    - _Requirements: 3.1-3.6, 4.1-4.6_
+  - [ ] 8.2 Write property test for role permission union
+    - **Property 7: Role Permission Union**
+    - **Validates: Requirements 3.7**
+  - [ ] 8.3 Implement route guards
+    - Create middleware for route protection
+    - Check permissions on every request
+    - Return 403 for unauthorized access
+    - _Requirements: 2.7, 2.8_
+  - [ ] 8.4 Write property test for RBAC permission check
+    - **Property 6: RBAC Permission Check**
+    - **Validates: Requirements 2.7**
+  - [ ] 8.5 Implement portal separation
+    - Enforce customer users cannot access admin routes
+    - Validate realm on authentication
+    - _Requirements: 1.2, 1.3, 1.4_
+  - [ ] 8.6 Write property test for portal route separation
+    - **Property 1: Portal Route Separation**
+    - **Validates: Requirements 1.4, 2.8**
+
+---
+
+- [ ] 9. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+---
+
+- [ ] 10. Login Page
+  - [ ] 10.1 Create login page layout
+    - Centered card on gradient background
+    - Theme toggle in top-right corner
+    - Responsive design for mobile/tablet/desktop
+    - _Requirements: 2.1, 18.1_
+  - [ ] 10.2 Implement login form
+    - Email input with mail icon
+    - Password input with show/hide toggle
+    - Remember me checkbox
+    - Forgot password link
+    - _Requirements: 2.3_
+  - [ ] 10.3 Add social login buttons
+    - Google OAuth button
+    - GitHub OAuth button
+    - Divider with "or continue with"
+    - _Requirements: 2.3_
+  - [ ] 10.4 Implement form validation and error handling
+    - Inline validation errors
+    - Toast notifications for API errors
+    - Loading state on submit
+    - _Requirements: 19.1, 19.3_
+  - [ ] 10.5 Write unit tests for login page
+    - Test form validation
+    - Test error display
+    - Test loading states
+    - _Requirements: 2.1-2.3_
+
+---
+
+- [ ] 11. Customer Portal Layout & Navigation
+  - [ ] 11.1 Create customer portal layout
+    - Fixed header with logo, nav, user profile
+    - Pill-shaped navigation (Verve style for light theme)
+    - Theme toggle and user dropdown
+    - _Requirements: 1.1, 6.1_
+  - [ ] 11.2 Implement responsive navigation
+    - Hamburger menu on mobile
+    - Slide-out drawer
+    - Touch-friendly interactions
+    - _Requirements: 18.1, 18.3_
+  - [ ] 11.3 Create navigation items
+    - Dashboard, API Keys, Billing, Team, Settings
+    - Active state indicators
+    - Permission-based visibility
+    - _Requirements: 3.8_
+
+---
+
+- [ ] 12. Customer Dashboard
+  - [ ] 12.1 Create dashboard page structure
+    - Date display (Verve style)
+    - Stats row with metric cards
+    - Charts section
+    - Recent activity section
+    - _Requirements: 7.1, 7.2_
+  - [ ] 12.2 Implement usage summary cards
+    - API requests metric
+    - Audio minutes metric
+    - LLM tokens metric
+    - _Requirements: 7.2_
+  - [ ] 12.3 Implement billing summary card
+    - Current plan display
+    - Amount due
+    - Next billing date
+    - _Requirements: 7.3_
+  - [ ] 12.4 Implement system health indicator
+    - API status (operational/degraded/down)
+    - Latency metrics
+    - _Requirements: 7.4_
+  - [ ] 12.5 Implement usage chart
+    - Line graph of API calls over 7 days
+    - Soft gradient fill (Verve style)
+    - _Requirements: 7.6_
+  - [ ] 12.6 Implement recent activity list
+    - Last 10 API calls
+    - Key events and alerts
+    - _Requirements: 7.5_
+  - [ ] 12.7 Implement auto-refresh
+    - Refresh data every 60 seconds
+    - No full page reload
+    - _Requirements: 7.8_
+  - [ ] 12.8 Write property test for dashboard auto-refresh
+    - **Property 12: Dashboard Auto-Refresh**
+    - **Validates: Requirements 7.8**
+  - [ ] 12.9 Write property test for dashboard default landing
+    - **Property 11: Dashboard Default Landing**
+    - **Validates: Requirements 7.1**
+
+---
+
+- [ ] 13. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+---
+
+- [ ] 14. API Key Management
+  - [ ] 14.1 Create API keys list page
+    - Display name, prefix, scopes, created date, last used
+    - Per-key usage stats
+    - _Requirements: 8.1, 8.7_
+  - [ ] 14.2 Implement create API key flow
+    - Name input, scope selection, optional expiration
+    - Display full key once with copy button
+    - Warning about key not being retrievable
+    - _Requirements: 8.2, 8.3_
+  - [ ] 14.3 Write property test for API key single display
+    - **Property 13: API Key Single Display**
+    - **Validates: Requirements 8.3**
+  - [ ] 14.4 Implement key rotation
+    - Create new key with 24-hour grace period for old key
+    - _Requirements: 8.5_
+  - [ ] 14.5 Write property test for rotation grace period
+    - **Property 14: API Key Rotation Grace Period**
+    - **Validates: Requirements 8.5**
+  - [ ] 14.6 Implement key revocation
+    - Confirmation dialog
+    - Immediate invalidation
+    - _Requirements: 8.6_
+  - [ ] 14.7 Write property test for immediate revocation
+    - **Property 15: API Key Immediate Revocation**
+    - **Validates: Requirements 8.6**
+  - [ ] 14.8 Implement bulk operations
+    - Multi-select for revocation
+    - Export key list (without secrets)
+    - _Requirements: 8.8_
+
+---
+
+- [ ] 15. Team Management
+  - [ ] 15.1 Create team members list page
+    - Display name, email, role, status, last login
+    - _Requirements: 10.1_
+  - [ ] 15.2 Implement invite member flow
+    - Email input, role selection
+    - Send invite with 7-day expiration
+    - _Requirements: 10.2, 10.3_
+  - [ ] 15.3 Write property test for invite expiration
+    - **Property 16: Team Invite Expiration**
+    - **Validates: Requirements 10.2**
+  - [ ] 15.4 Implement role management
+    - Change member role
+    - Log role changes
+    - _Requirements: 10.4_
+  - [ ] 15.5 Implement member removal
+    - Confirmation dialog
+    - Revoke all sessions
+    - _Requirements: 10.5_
+  - [ ] 15.6 Implement team size limits
+    - Enforce plan limits (Free: 3, Pro: 10, Enterprise: unlimited)
+    - Display limit warning
+    - _Requirements: 10.8_
+  - [ ] 15.7 Write property test for team size limits
+    - **Property 17: Team Size Limit Enforcement**
+    - **Validates: Requirements 10.8**
+  - [ ] 15.8 Implement pending invites management
+    - Display pending invites
+    - Resend or cancel options
+    - _Requirements: 10.7_
+
+---
+
+- [ ] 16. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+---
+
+- [ ] 17. Billing & Payments (Customer)
+  - [ ] 17.1 Create billing overview page
+    - Current plan details
+    - Usage vs limits
+    - Projected cost
+    - _Requirements: 9.1_
+  - [ ] 17.2 Implement plan comparison
+    - Free, Pro, Enterprise feature matrix
+    - Upgrade/downgrade buttons
+    - _Requirements: 9.2_
+  - [ ] 17.3 Implement plan upgrade flow
+    - Show prorated cost
+    - Apply immediately
+    - _Requirements: 9.3_
+  - [ ] 17.4 Implement plan downgrade flow
+    - Apply at end of billing period
+    - Confirmation with impact summary
+    - _Requirements: 9.4_
+  - [ ] 17.5 Create invoice history
+    - Date, amount, status, PDF download
+    - _Requirements: 9.5_
+  - [ ] 17.6 Implement payment methods management
+    - Display cards with last 4 digits
+    - Add payment method via Stripe Elements
+    - Set default payment method
+    - _Requirements: 9.6, 9.7_
+  - [ ] 17.7 Create usage breakdown
+    - API calls, audio minutes, tokens
+    - Unit costs
+    - _Requirements: 9.8_
+
+---
+
+- [ ] 18. Customer Settings
+  - [ ] 18.1 Create settings page with sections
+    - Profile, Notifications, Webhooks, Security tabs
+    - _Requirements: 11.1_
+  - [ ] 18.2 Implement profile settings
+    - Organization name, email, timezone
+    - Logo upload
+    - _Requirements: 11.2_
+  - [ ] 18.3 Implement notification settings
+    - Toggle billing, usage, security alerts
+    - Product updates preference
+    - _Requirements: 11.3_
+  - [ ] 18.4 Implement webhooks management
+    - Create webhook (URL, events)
+    - Test webhook
+    - View delivery history
+    - _Requirements: 11.4_
+  - [ ] 18.5 Implement security settings
+    - Active sessions list
+    - Login history
+    - MFA status and setup
+    - _Requirements: 11.5, 11.6_
+  - [ ] 18.6 Implement session management
+    - Terminate other sessions
+    - _Requirements: 11.7_
+  - [ ] 18.7 Implement audit log display
+    - Last 100 actions
+    - Timestamp, action, IP address
+    - _Requirements: 11.8_
+
+---
+
+- [ ] 19. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+---
+
+- [ ] 20. Admin Portal Layout & Navigation
+  - [ ] 20.1 Create admin portal layout
+    - Sidebar navigation (240px/280px)
+    - Header with search and user profile
+    - _Requirements: 1.1, 4.1_
+  - [ ] 20.2 Implement admin navigation
+    - Dashboard, Tenants, Billing, Plans, Monitoring, Audit
+    - Collapsible sidebar on mobile
+    - _Requirements: 4.1-4.6_
+
+---
+
+- [ ] 21. Admin Dashboard
+  - [ ] 21.1 Create admin dashboard structure
+    - Key metrics row
+    - System health grid
+    - Revenue metrics
+    - _Requirements: 12.1, 12.2, 12.3_
+  - [ ] 21.2 Implement usage heatmap
+    - Requests by hour over 7 days
+    - _Requirements: 12.4_
+  - [ ] 21.3 Implement alerts section
+    - Critical issues
+    - Tenants approaching limits
+    - Failed payments
+    - _Requirements: 12.5_
+  - [ ] 21.4 Implement top tenants display
+    - By usage, revenue, growth
+    - _Requirements: 12.6_
+  - [ ] 21.5 Implement date range selector
+    - Today, 7d, 30d, 90d, custom
+    - _Requirements: 12.8_
+
+---
+
+- [ ] 22. Tenant Management
+  - [ ] 22.1 Create tenant list page
+    - Name, plan, status, MRR, created date, last activity
+    - _Requirements: 13.1_
+  - [ ] 22.2 Implement search and filters
+    - Search by name, email, tenant_id
+    - Filter by plan, status, date range
+    - _Requirements: 13.2, 13.3_
+  - [ ] 22.3 Create tenant detail view
+    - Profile, usage, billing, team, API keys, audit log tabs
+    - _Requirements: 13.4_
+  - [ ] 22.4 Implement tenant actions
+    - Suspend (with reason), unsuspend, delete
+    - Change plan, apply credits, extend trial
+    - _Requirements: 13.5, 13.6_
+  - [ ] 22.5 Implement suspension flow
+    - Send notification email
+    - Close active sessions
+    - _Requirements: 13.7_
+  - [ ] 22.6 Implement user impersonation
+    - Login as tenant user
+    - Create audit trail
+    - _Requirements: 13.8_
+  - [ ] 22.7 Write property test for impersonation audit
+    - **Property 18: Impersonation Audit Trail**
+    - **Validates: Requirements 4.7, 13.8**
+
+---
+
+- [ ] 23. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+---
+
+- [ ] 24. Admin Billing
+  - [ ] 24.1 Create billing admin overview
+    - Total revenue, pending payments, failed payments, refunds
+    - _Requirements: 14.1_
+  - [ ] 24.2 Implement invoice management
+    - All invoices with filters
+    - Manual invoice creation
+    - _Requirements: 14.2, 14.7_
+  - [ ] 24.3 Implement refund processing
+    - Amount, reason input
+    - Approval workflow for amounts > $100
+    - _Requirements: 14.3_
+  - [ ] 24.4 Write property test for refund approval threshold
+    - **Property 19: Refund Approval Threshold**
+    - **Validates: Requirements 14.3**
+  - [ ] 24.5 Implement credit management
+    - Apply credits with amount, reason, expiration
+    - _Requirements: 14.4_
+  - [ ] 24.6 Implement payment failure handling
+    - Display failures with details
+    - Retry payment option
+    - _Requirements: 14.5, 14.6_
+  - [ ] 24.7 Create revenue reports
+    - By plan, period, payment method
+    - _Requirements: 14.8_
+
+---
+
+- [ ] 25. Plan Management
+  - [ ] 25.1 Create plan list page
+    - Name, price, limits, subscriber count
+    - _Requirements: 15.1_
+  - [ ] 25.2 Implement plan editing
+    - Name, description, price, limits, features
+    - _Requirements: 15.2_
+  - [ ] 25.3 Implement price change with grandfathering
+    - Apply to new subscribers only
+    - _Requirements: 15.3_
+  - [ ] 25.4 Write property test for plan price grandfathering
+    - **Property 20: Plan Price Grandfathering**
+    - **Validates: Requirements 15.3**
+  - [ ] 25.5 Implement plan creation
+    - Name, price, billing interval, limits, features
+    - _Requirements: 15.4_
+  - [ ] 25.6 Implement plan deprecation
+    - Hide from new signups
+    - Migrate existing subscribers
+    - _Requirements: 15.5_
+  - [ ] 25.7 Implement plan analytics
+    - Subscribers, revenue, churn, upgrades/downgrades
+    - _Requirements: 15.6_
+  - [ ] 25.8 Implement promotional plans
+    - Discount percentage, duration, coupon codes
+    - _Requirements: 15.7_
+  - [ ] 25.9 Implement Lago sync
+    - Sync plan changes within 60 seconds
+    - _Requirements: 15.8_
+  - [ ] 25.10 Write property test for Lago sync timing
+    - **Property 21: Lago Sync Timing**
+    - **Validates: Requirements 15.8**
+
+---
+
+- [ ] 26. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+---
+
+- [ ] 27. System Monitoring
+  - [ ] 27.1 Create monitoring dashboard
+    - Service status grid
+    - _Requirements: 16.1_
+  - [ ] 27.2 Implement service metrics
+    - CPU, memory, disk, network per service
+    - _Requirements: 16.2_
+  - [ ] 27.3 Implement queue metrics
+    - Depth, processing rate, error rate
+    - _Requirements: 16.3_
+  - [ ] 27.4 Implement database metrics
+    - Connections, query latency, replication lag
+    - _Requirements: 16.4_
+  - [ ] 27.5 Implement error logs viewer
+    - Filter by service, severity, time range
+    - _Requirements: 16.5_
+  - [ ] 27.6 Implement service health alerts
+    - Display alert with details and suggested actions
+    - _Requirements: 16.6_
+  - [ ] 27.7 Implement drill-down views
+    - Click service for detailed metrics and logs
+    - _Requirements: 16.7_
+  - [ ] 27.8 Add Grafana integration link
+    - _Requirements: 16.8_
+
+---
+
+- [ ] 28. Audit & Compliance
+  - [ ] 28.1 Create audit log page
+    - Timestamp, actor, action, target, details, IP
+    - _Requirements: 17.1_
+  - [ ] 28.2 Write property test for audit log completeness
+    - **Property 22: Audit Log Completeness**
+    - **Validates: Requirements 17.1, 17.2**
+  - [ ] 28.3 Implement audit log search
+    - By actor, action type, target, date range
+    - _Requirements: 17.3_
+  - [ ] 28.4 Implement audit log export
+    - CSV and JSON formats
+    - _Requirements: 17.4_
+  - [ ] 28.5 Implement login history
+    - All admin logins with IP, device, location
+    - _Requirements: 17.7_
+  - [ ] 28.6 Implement suspicious activity alerts
+    - Multiple failed logins
+    - Unusual access patterns
+    - _Requirements: 17.8_
+
+---
+
+- [ ] 29. Error Handling & Accessibility
+  - [ ] 29.1 Implement error pages
+    - 404, 403, 500 error pages
+    - _Requirements: 19.1_
+  - [ ] 29.2 Implement offline indicator
+    - Detect network status
+    - Queue actions for retry
+    - _Requirements: 19.6_
+  - [ ] 29.3 Implement client-side error logging
+    - Log errors to monitoring system
+    - _Requirements: 19.7_
+  - [ ] 29.4 Implement "Report Issue" feature
+    - Pre-filled context for support tickets
+    - _Requirements: 19.8_
+  - [ ] 29.5 Implement skip links
+    - Skip to main content
+    - Skip navigation
+    - _Requirements: 18.8_
+  - [ ] 29.6 Implement reduced motion support
+    - Respect prefers-reduced-motion
+    - _Requirements: 18.7_
+  - [ ] 29.7 Verify keyboard navigation
+    - All interactive elements accessible
+    - Visible focus indicators
+    - _Requirements: 18.6_
+
+---
+
+- [ ] 30. Final Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
