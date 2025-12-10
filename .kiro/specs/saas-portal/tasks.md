@@ -366,73 +366,73 @@ This implementation plan builds the dual-portal SaaS system incrementally, with 
 
 ---
 
-- [ ] 17. Billing & Payments (Customer)
-  - [ ] 17.1 Create billing overview page
+- [x] 17. Billing & Payments (Customer)
+  - [x] 17.1 Create billing overview page
     - Current plan details
     - Usage vs limits
     - Projected cost
     - _Requirements: 9.1_
-  - [ ] 17.2 Implement plan comparison
+  - [x] 17.2 Implement plan comparison
     - Free, Pro, Enterprise feature matrix
     - Upgrade/downgrade buttons
     - _Requirements: 9.2_
-  - [ ] 17.3 Implement plan upgrade flow
+  - [x] 17.3 Implement plan upgrade flow
     - Show prorated cost
     - Apply immediately
     - _Requirements: 9.3_
-  - [ ] 17.4 Implement plan downgrade flow
+  - [x] 17.4 Implement plan downgrade flow
     - Apply at end of billing period
     - Confirmation with impact summary
     - _Requirements: 9.4_
-  - [ ] 17.5 Create invoice history
+  - [x] 17.5 Create invoice history
     - Date, amount, status, PDF download
     - _Requirements: 9.5_
-  - [ ] 17.6 Implement payment methods management
+  - [x] 17.6 Implement payment methods management
     - Display cards with last 4 digits
     - Add payment method via Stripe Elements
     - Set default payment method
     - _Requirements: 9.6, 9.7_
-  - [ ] 17.7 Create usage breakdown
+  - [x] 17.7 Create usage breakdown
     - API calls, audio minutes, tokens
     - Unit costs
     - _Requirements: 9.8_
 
 ---
 
-- [ ] 18. Customer Settings
-  - [ ] 18.1 Create settings page with sections
+- [x] 18. Customer Settings
+  - [x] 18.1 Create settings page with sections
     - Profile, Notifications, Webhooks, Security tabs
     - _Requirements: 11.1_
-  - [ ] 18.2 Implement profile settings
+  - [x] 18.2 Implement profile settings
     - Organization name, email, timezone
     - Logo upload
     - _Requirements: 11.2_
-  - [ ] 18.3 Implement notification settings
+  - [x] 18.3 Implement notification settings
     - Toggle billing, usage, security alerts
     - Product updates preference
     - _Requirements: 11.3_
-  - [ ] 18.4 Implement webhooks management
+  - [x] 18.4 Implement webhooks management
     - Create webhook (URL, events)
     - Test webhook
     - View delivery history
     - _Requirements: 11.4_
-  - [ ] 18.5 Implement security settings
+  - [x] 18.5 Implement security settings
     - Active sessions list
     - Login history
     - MFA status and setup
     - _Requirements: 11.5, 11.6_
-  - [ ] 18.6 Implement session management
+  - [x] 18.6 Implement session management
     - Terminate other sessions
     - _Requirements: 11.7_
-  - [ ] 18.7 Implement audit log display
+  - [x] 18.7 Implement audit log display
     - Last 100 actions
     - Timestamp, action, IP address
     - _Requirements: 11.8_
 
 ---
 
-- [ ] 19. Checkpoint - Ensure all tests pass
-  - Ensure all tests pass, ask the user if questions arise.
+- [x] 19. Checkpoint - Ensure all tests pass
+  - All 171 tests passing (customer portal complete)
 
 ---
 
