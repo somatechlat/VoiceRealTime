@@ -132,7 +132,7 @@ This implementation plan builds the dual-portal SaaS system incrementally, with 
 
 ---
 
-- [-] 7. Authentication System
+- [x] 7. Authentication System
   - [x] 7.1 Implement AuthService interface
     - Create login, logout, refreshToken methods
     - Implement getCurrentUser and hasPermission
@@ -143,25 +143,25 @@ This implementation plan builds the dual-portal SaaS system incrementally, with 
     - Extract user_id, tenant_id, roles, permissions
     - Store tokens in httpOnly cookies
     - _Requirements: 2.2_
-  - [ ] 7.3 Write property test for JWT token claims
+  - [x] 7.3 Write property test for JWT token claims
     - **Property 2: JWT Token Claims Completeness**
     - **Validates: Requirements 2.2**
-  - [ ] 7.4 Implement session management
+  - [x] 7.4 Implement session management
     - Track idle time and total session time
     - Implement automatic logout on timeout
     - Handle token refresh
     - _Requirements: 2.5, 2.6_
-  - [ ] 7.5 Write property test for session timeout
+  - [x] 7.5 Write property test for session timeout
     - **Property 4: Session Timeout Enforcement**
     - **Validates: Requirements 2.5**
-  - [ ] 7.6 Write property test for token refresh
+  - [x] 7.6 Write property test for token refresh
     - **Property 5: Token Refresh Transparency**
     - **Validates: Requirements 2.6**
-  - [ ] 7.7 Implement MFA handling
+  - [x] 7.7 Implement MFA handling
     - Detect MFA requirement from login response
     - Create MFA verification flow
     - _Requirements: 2.4_
-  - [ ] 7.8 Write property test for MFA enforcement
+  - [x] 7.8 Write property test for MFA enforcement
     - **Property 3: MFA Enforcement**
     - **Validates: Requirements 2.4**
 
