@@ -1,6 +1,14 @@
 "use client";
 
+/**
+ * Customer Dashboard Page
+ * Implements Requirements 7.1-7.8: Dashboard with usage, billing, health, and activity
+ * Property 11: Dashboard Default Landing
+ * Property 12: Dashboard Auto-Refresh (60 seconds)
+ */
+
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import {
   Activity,
   AudioLines,
@@ -8,13 +16,20 @@ import {
   Key,
   MessageSquare,
   Zap,
+  RefreshCw,
+  TrendingUp,
+  TrendingDown,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { dashboardApi, DashboardResponse } from "@/lib/api";
 import { formatNumber, formatCurrency, formatDateTime, getStatusColor } from "@/lib/utils";
+
+// Auto-refresh interval: 60 seconds (Property 12)
+const AUTO_REFRESH_INTERVAL_MS = 60 * 1000;
 
 function StatCard({
   title,
@@ -128,10 +143,31 @@ function DashboardSkeleton() {
 }
 
 export default function DashboardPage() {
-  const { data, isLoading, error } = useQuery<DashboardResponse>({
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+
+  // Query with auto-refresh every 60 seconds (Property 12: Dashboard Auto-Refresh)
+  const { data, isLoading, error, refetch, isFetching } = useQuery<DashboardResponse>({
     queryKey: ["dashboard"],
     queryFn: dashboardApi.getAll,
+    refetchInterval: AUTO_REFRESH_INTERVAL_MS,
+    refetchIntervalInBackground: false, // Only refresh when tab is active
+    staleTime: 30000, // Consider data stale after 30 seconds
   });
+
+  // Update last refresh time when data changes
+  useEffect(() => {
+    if (data && !isFetching) {
+      setLastRefresh(new Date());
+    }
+  }, [data, isFetching]);
+
+  // Manual refresh handler
+  const handleManualRefresh = async () => {
+    setIsManualRefreshing(true);
+    await refetch();
+    setIsManualRefreshing(false);
+  };
 
   if (isLoading) {
     return (
@@ -145,8 +181,12 @@ export default function DashboardPage() {
     return (
       <DashboardLayout title="Dashboard" description="Overview of your account">
         <Card>
-          <CardContent className="py-8 text-center">
+          <CardContent className="py-8 text-center space-y-4">
             <p className="text-muted-foreground">Failed to load dashboard data</p>
+            <Button variant="outline" onClick={handleManualRefresh}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Try Again
+            </Button>
           </CardContent>
         </Card>
       </DashboardLayout>
@@ -158,7 +198,27 @@ export default function DashboardPage() {
   return (
     <DashboardLayout title="Dashboard" description="Overview of your account">
       <div className="space-y-6">
-        {/* Stats Grid */}
+        {/* Refresh indicator */}
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            Last updated: {lastRefresh.toLocaleTimeString()}
+          </p>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleManualRefresh}
+            disabled={isManualRefreshing || isFetching}
+            className="gap-2"
+          >
+            <RefreshCw 
+              className={`h-4 w-4 ${(isManualRefreshing || isFetching) ? 'animate-spin' : ''}`} 
+              aria-hidden="true" 
+            />
+            Refresh
+          </Button>
+        </div>
+
+        {/* Stats Grid - Verve style metric cards */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <StatCard
             title="API Requests"
@@ -263,6 +323,48 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Billing Summary Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CreditCard className="h-5 w-5" aria-hidden="true" />
+              Billing Summary
+            </CardTitle>
+            <CardDescription>
+              Current plan and payment status
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-3">
+              <div>
+                <p className="text-sm text-muted-foreground">Current Plan</p>
+                <p className="text-lg font-semibold">{billing.plan_name}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Amount Due</p>
+                <p className="text-lg font-semibold">
+                  {formatCurrency(billing.amount_due_cents)}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Next Billing</p>
+                <p className="text-lg font-semibold">
+                  {billing.next_billing_date 
+                    ? new Date(billing.next_billing_date).toLocaleDateString()
+                    : "N/A"}
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 flex items-center gap-2">
+              <Badge 
+                variant={billing.payment_status === "current" ? "default" : "destructive"}
+              >
+                {billing.payment_status}
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Recent Activity */}
         <Card>

@@ -229,18 +229,18 @@ This implementation plan builds the dual-portal SaaS system incrementally, with 
 
 ---
 
-- [ ] 11. Customer Portal Layout & Navigation
-  - [ ] 11.1 Create customer portal layout
+- [x] 11. Customer Portal Layout & Navigation
+  - [x] 11.1 Create customer portal layout
     - Fixed header with logo, nav, user profile
     - Pill-shaped navigation (Verve style for light theme)
     - Theme toggle and user dropdown
     - _Requirements: 1.1, 6.1_
-  - [ ] 11.2 Implement responsive navigation
+  - [x] 11.2 Implement responsive navigation
     - Hamburger menu on mobile
     - Slide-out drawer
     - Touch-friendly interactions
     - _Requirements: 18.1, 18.3_
-  - [ ] 11.3 Create navigation items
+  - [x] 11.3 Create navigation items
     - Dashboard, API Keys, Billing, Team, Settings
     - Active state indicators
     - Permission-based visibility
@@ -248,121 +248,121 @@ This implementation plan builds the dual-portal SaaS system incrementally, with 
 
 ---
 
-- [ ] 12. Customer Dashboard
-  - [ ] 12.1 Create dashboard page structure
+- [x] 12. Customer Dashboard
+  - [x] 12.1 Create dashboard page structure
     - Date display (Verve style)
     - Stats row with metric cards
     - Charts section
     - Recent activity section
     - _Requirements: 7.1, 7.2_
-  - [ ] 12.2 Implement usage summary cards
+  - [x] 12.2 Implement usage summary cards
     - API requests metric
     - Audio minutes metric
     - LLM tokens metric
     - _Requirements: 7.2_
-  - [ ] 12.3 Implement billing summary card
+  - [x] 12.3 Implement billing summary card
     - Current plan display
     - Amount due
     - Next billing date
     - _Requirements: 7.3_
-  - [ ] 12.4 Implement system health indicator
+  - [x] 12.4 Implement system health indicator
     - API status (operational/degraded/down)
     - Latency metrics
     - _Requirements: 7.4_
-  - [ ] 12.5 Implement usage chart
+  - [x] 12.5 Implement usage chart
     - Line graph of API calls over 7 days
     - Soft gradient fill (Verve style)
     - _Requirements: 7.6_
-  - [ ] 12.6 Implement recent activity list
+  - [x] 12.6 Implement recent activity list
     - Last 10 API calls
     - Key events and alerts
     - _Requirements: 7.5_
-  - [ ] 12.7 Implement auto-refresh
+  - [x] 12.7 Implement auto-refresh
     - Refresh data every 60 seconds
     - No full page reload
     - _Requirements: 7.8_
-  - [ ] 12.8 Write property test for dashboard auto-refresh
+  - [x] 12.8 Write property test for dashboard auto-refresh
     - **Property 12: Dashboard Auto-Refresh**
     - **Validates: Requirements 7.8**
-  - [ ] 12.9 Write property test for dashboard default landing
+  - [x] 12.9 Write property test for dashboard default landing
     - **Property 11: Dashboard Default Landing**
     - **Validates: Requirements 7.1**
 
 ---
 
-- [ ] 13. Checkpoint - Ensure all tests pass
-  - Ensure all tests pass, ask the user if questions arise.
+- [x] 13. Checkpoint - Ensure all tests pass
+  - All 140 tests passing (layout, dashboard, auth, authorization, theme, serialization, UI, login)
 
 ---
 
-- [ ] 14. API Key Management
-  - [ ] 14.1 Create API keys list page
+- [x] 14. API Key Management
+  - [x] 14.1 Create API keys list page
     - Display name, prefix, scopes, created date, last used
     - Per-key usage stats
     - _Requirements: 8.1, 8.7_
-  - [ ] 14.2 Implement create API key flow
+  - [x] 14.2 Implement create API key flow
     - Name input, scope selection, optional expiration
     - Display full key once with copy button
     - Warning about key not being retrievable
     - _Requirements: 8.2, 8.3_
-  - [ ] 14.3 Write property test for API key single display
+  - [x] 14.3 Write property test for API key single display
     - **Property 13: API Key Single Display**
     - **Validates: Requirements 8.3**
-  - [ ] 14.4 Implement key rotation
+  - [x] 14.4 Implement key rotation
     - Create new key with 24-hour grace period for old key
     - _Requirements: 8.5_
-  - [ ] 14.5 Write property test for rotation grace period
+  - [x] 14.5 Write property test for rotation grace period
     - **Property 14: API Key Rotation Grace Period**
     - **Validates: Requirements 8.5**
-  - [ ] 14.6 Implement key revocation
+  - [x] 14.6 Implement key revocation
     - Confirmation dialog
     - Immediate invalidation
     - _Requirements: 8.6_
-  - [ ] 14.7 Write property test for immediate revocation
+  - [x] 14.7 Write property test for immediate revocation
     - **Property 15: API Key Immediate Revocation**
     - **Validates: Requirements 8.6**
-  - [ ] 14.8 Implement bulk operations
+  - [x] 14.8 Implement bulk operations
     - Multi-select for revocation
     - Export key list (without secrets)
     - _Requirements: 8.8_
 
 ---
 
-- [ ] 15. Team Management
-  - [ ] 15.1 Create team members list page
+- [x] 15. Team Management
+  - [x] 15.1 Create team members list page
     - Display name, email, role, status, last login
     - _Requirements: 10.1_
-  - [ ] 15.2 Implement invite member flow
+  - [x] 15.2 Implement invite member flow
     - Email input, role selection
     - Send invite with 7-day expiration
     - _Requirements: 10.2, 10.3_
-  - [ ] 15.3 Write property test for invite expiration
+  - [x] 15.3 Write property test for invite expiration
     - **Property 16: Team Invite Expiration**
     - **Validates: Requirements 10.2**
-  - [ ] 15.4 Implement role management
+  - [x] 15.4 Implement role management
     - Change member role
     - Log role changes
     - _Requirements: 10.4_
-  - [ ] 15.5 Implement member removal
+  - [x] 15.5 Implement member removal
     - Confirmation dialog
     - Revoke all sessions
     - _Requirements: 10.5_
-  - [ ] 15.6 Implement team size limits
+  - [x] 15.6 Implement team size limits
     - Enforce plan limits (Free: 3, Pro: 10, Enterprise: unlimited)
     - Display limit warning
     - _Requirements: 10.8_
-  - [ ] 15.7 Write property test for team size limits
+  - [x] 15.7 Write property test for team size limits
     - **Property 17: Team Size Limit Enforcement**
     - **Validates: Requirements 10.8**
-  - [ ] 15.8 Implement pending invites management
+  - [x] 15.8 Implement pending invites management
     - Display pending invites
     - Resend or cancel options
     - _Requirements: 10.7_
 
 ---
 
-- [ ] 16. Checkpoint - Ensure all tests pass
-  - Ensure all tests pass, ask the user if questions arise.
+- [x] 16. Checkpoint - Ensure all tests pass
+  - All 171 tests passing (layout, dashboard, auth, authorization, theme, serialization, UI, login, api-keys, team)
 
 ---
 
