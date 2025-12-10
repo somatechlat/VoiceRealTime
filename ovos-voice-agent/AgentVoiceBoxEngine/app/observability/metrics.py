@@ -7,6 +7,7 @@ Implements Requirements 14.1, 14.2, 14.3:
 
 Metrics exposed at /metrics endpoint.
 """
+
 from __future__ import annotations
 
 import functools
@@ -14,15 +15,14 @@ import time
 from contextlib import contextmanager
 from typing import Any, Callable, Generator, Optional, Tuple
 
-from flask import Flask
 from prometheus_client import (
+    REGISTRY,
     CollectorRegistry,
     Counter,
     Gauge,
     Histogram,
     Info,
     make_wsgi_app,
-    REGISTRY,
 )
 
 from ..config import AppConfig
@@ -33,14 +33,26 @@ NAMESPACE = "agentvoicebox"
 # Standard buckets for latency histograms (in seconds)
 # Covers 1ms to 10s with good granularity for p50/p95/p99
 LATENCY_BUCKETS = (
-    0.001, 0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75,
-    1.0, 2.5, 5.0, 7.5, 10.0, float("inf")
+    0.001,
+    0.005,
+    0.01,
+    0.025,
+    0.05,
+    0.075,
+    0.1,
+    0.25,
+    0.5,
+    0.75,
+    1.0,
+    2.5,
+    5.0,
+    7.5,
+    10.0,
+    float("inf"),
 )
 
 # Audio processing buckets (longer operations)
-AUDIO_LATENCY_BUCKETS = (
-    0.05, 0.1, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 5.0, 10.0, float("inf")
-)
+AUDIO_LATENCY_BUCKETS = (0.05, 0.1, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 5.0, 10.0, float("inf"))
 
 # ============================================================================
 # Service Info
@@ -295,13 +307,14 @@ redis_connections_active = Gauge(
 # Helper Functions and Decorators
 # ============================================================================
 
+
 @contextmanager
 def track_latency(
     histogram: Histogram,
     labels: Optional[dict] = None,
 ) -> Generator[None, None, None]:
     """Context manager to track operation latency.
-    
+
     Usage:
         with track_latency(websocket_message_latency, {"message_type": "audio", "tenant_id": "t1"}):
             process_message()
@@ -322,12 +335,13 @@ def timed(
     label_func: Optional[Callable[..., dict]] = None,
 ) -> Callable:
     """Decorator to track function execution time.
-    
+
     Usage:
         @timed(stt_transcription_latency, lambda self, audio: {"tenant_id": self.tenant_id, "model": "whisper"})
         async def transcribe(self, audio):
             ...
     """
+
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -341,7 +355,7 @@ def timed(
                     histogram.labels(**labels).observe(duration)
                 else:
                     histogram.observe(duration)
-        
+
         @functools.wraps(func)
         def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
             start = time.perf_counter()
@@ -354,11 +368,13 @@ def timed(
                     histogram.labels(**labels).observe(duration)
                 else:
                     histogram.observe(duration)
-        
+
         import asyncio
+
         if asyncio.iscoroutinefunction(func):
             return async_wrapper
         return sync_wrapper
+
     return decorator
 
 
@@ -390,25 +406,28 @@ def set_gauge(
 # Initialization
 # ============================================================================
 
+
 def init_metrics(config: AppConfig) -> Tuple[CollectorRegistry, Any]:
     """Initialize Prometheus metrics and return registry and WSGI app.
-    
+
     Args:
         config: Application configuration
-        
+
     Returns:
         Tuple of (registry, metrics_wsgi_app)
     """
     # Set service info
-    service_info.info({
-        "version": "1.0.0",
-        "environment": config.flask_env,
-        "service_name": config.observability.service_name,
-    })
-    
+    service_info.info(
+        {
+            "version": "1.0.0",
+            "environment": config.flask_env,
+            "service_name": config.observability.service_name,
+        }
+    )
+
     # Create WSGI app for /metrics endpoint
     metrics_app = make_wsgi_app(registry=REGISTRY)
-    
+
     return REGISTRY, metrics_app
 
 
@@ -443,65 +462,51 @@ active_sessions = Gauge(
 __all__ = [
     # Initialization
     "init_metrics",
-    
     # Service info
     "service_info",
-    
     # WebSocket metrics
     "websocket_message_latency",
     "websocket_connections_total",
     "active_connections",
     "active_connections_total",
-    
     # Session metrics
     "session_starts_total",
     "session_duration_seconds",
-    
     # STT metrics
     "stt_transcription_latency",
     "stt_requests_total",
     "stt_audio_duration_seconds",
-    
     # TTS metrics
     "tts_synthesis_latency",
     "tts_requests_total",
     "tts_characters_total",
-    
     # LLM metrics
     "llm_generation_latency",
     "llm_requests_total",
     "llm_tokens_total",
-    
     # Queue/Worker metrics
     "queue_depth",
     "worker_utilization",
     "worker_active",
-    
     # Rate limiting metrics
     "rate_limit_hits_total",
     "rate_limit_remaining",
-    
     # Auth metrics
     "auth_attempts_total",
     "auth_latency",
-    
     # Error metrics
     "errors_total",
-    
     # Database metrics
     "db_query_latency",
     "db_connections_active",
-    
     # Redis metrics
     "redis_operation_latency",
     "redis_connections_active",
-    
     # Helpers
     "track_latency",
     "timed",
     "increment_counter",
     "set_gauge",
-    
     # Legacy aliases
     "session_starts",
     "policy_denials",

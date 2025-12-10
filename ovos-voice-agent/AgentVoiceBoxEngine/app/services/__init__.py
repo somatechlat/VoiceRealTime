@@ -1,15 +1,26 @@
 """AgentVoiceBox Engine services."""
 
-from .redis_client import (
-    RedisClient,
-    get_redis_client,
-    init_redis_client,
-    close_redis_client,
+from .api_key_service import (
+    ARGON2_AVAILABLE,
+    APIKeyHasher,
+    APIKeyInfo,
+    APIKeyService,
+    generate_api_key,
 )
-from .distributed_session import (
-    DistributedSessionManager,
-    Session,
-    SessionConfig,
+from .audit_service import (
+    AuditAction,
+    AuditEntry,
+    AuditService,
+    audit,
+    get_audit_service,
+    init_audit_service,
+)
+from .connection_manager import (
+    ConnectionInfo,
+    ConnectionManager,
+    get_connection_manager,
+    init_connection_manager,
+    setup_signal_handlers,
 )
 from .distributed_rate_limiter import (
     DistributedRateLimiter,
@@ -17,64 +28,53 @@ from .distributed_rate_limiter import (
     RateLimitResult,
     count_tokens,
 )
-from .connection_manager import (
-    ConnectionManager,
-    ConnectionInfo,
-    get_connection_manager,
-    init_connection_manager,
-    setup_signal_handlers,
-)
-from .redis_streams import (
-    RedisStreamsClient,
-    AudioSTTRequest,
-    TTSRequest,
-    TranscriptionResult,
-    get_streams_client,
-    init_streams_client,
-)
-from .session_service import SessionService
-from .token_service import TokenService
-from .kafka_client import KafkaFactory, kafka_producer
-from .opa_client import OPAClient
-from .api_key_service import (
-    ARGON2_AVAILABLE,
-    APIKeyInfo,
-    APIKeyHasher,
-    APIKeyService,
-    generate_api_key,
+from .distributed_session import (
+    DistributedSessionManager,
+    Session,
+    SessionConfig,
 )
 from .ephemeral_token_service import (
     EphemeralToken,
     EphemeralTokenService,
 )
+from .kafka_client import KafkaFactory, kafka_producer
+from .opa_client import OPAClient
+from .redis_client import (
+    RedisClient,
+    close_redis_client,
+    get_redis_client,
+    init_redis_client,
+)
+from .redis_streams import (
+    AudioSTTRequest,
+    RedisStreamsClient,
+    TranscriptionResult,
+    TTSRequest,
+    get_streams_client,
+    init_streams_client,
+)
+from .session_service import SessionService
 from .tenant_context import (
     TenantContext,
     TenantIsolation,
-    set_tenant_context,
+    clear_tenant_context,
     get_tenant_context,
     require_tenant_context,
-    clear_tenant_context,
+    set_tenant_context,
 )
-from .audit_service import (
-    AuditAction,
-    AuditEntry,
-    AuditService,
-    get_audit_service,
-    init_audit_service,
-    audit,
-)
+from .token_service import TokenService
 
 # Async database is optional (only for workers with asyncpg installed)
 try:
     from .async_database import (
         ASYNCPG_AVAILABLE,
-        AsyncDatabaseConfig,
-        AsyncDatabaseClient,
-        ConversationItemData,
         AsyncConversationRepository,
+        AsyncDatabaseClient,
+        AsyncDatabaseConfig,
+        ConversationItemData,
         ConversationOverflowHandler,
-        get_async_database,
         close_async_database,
+        get_async_database,
     )
 except ImportError:
     ASYNCPG_AVAILABLE = False

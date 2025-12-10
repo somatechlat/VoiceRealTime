@@ -28,24 +28,24 @@ def load_json(filename: str) -> dict:
 def create_billable_metrics(client: httpx.Client, api_url: str, api_key: str) -> None:
     """Create billable metrics in Lago."""
     print("\n=== Creating Billable Metrics ===")
-    
+
     data = load_json("billable_metrics.json")
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-    
+
     for metric in data["billable_metrics"]:
         print(f"  Creating metric: {metric['code']}...", end=" ")
-        
+
         payload = {"billable_metric": metric}
-        
+
         response = client.post(
             f"{api_url}/api/v1/billable_metrics",
             headers=headers,
             json=payload,
         )
-        
+
         if response.status_code == 200:
             print("✓ Created")
         elif response.status_code == 422:
@@ -66,24 +66,24 @@ def create_billable_metrics(client: httpx.Client, api_url: str, api_key: str) ->
 def create_plans(client: httpx.Client, api_url: str, api_key: str) -> None:
     """Create subscription plans in Lago."""
     print("\n=== Creating Subscription Plans ===")
-    
+
     data = load_json("plans.json")
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-    
+
     for plan in data["plans"]:
         print(f"  Creating plan: {plan['code']}...", end=" ")
-        
+
         payload = {"plan": plan}
-        
+
         response = client.post(
             f"{api_url}/api/v1/plans",
             headers=headers,
             json=payload,
         )
-        
+
         if response.status_code == 200:
             print("✓ Created")
         elif response.status_code == 422:
@@ -115,11 +115,11 @@ def main():
         required=True,
         help="Lago API key",
     )
-    
+
     args = parser.parse_args()
-    
+
     print(f"Seeding Lago at {args.api_url}")
-    
+
     with httpx.Client(timeout=30.0) as client:
         # Test connection
         try:
@@ -130,15 +130,15 @@ def main():
         except httpx.ConnectError:
             print(f"Error: Cannot connect to Lago at {args.api_url}")
             sys.exit(1)
-        
+
         print("✓ Connected to Lago")
-        
+
         # Create billable metrics first (plans depend on them)
         create_billable_metrics(client, args.api_url, args.api_key)
-        
+
         # Create plans
         create_plans(client, args.api_url, args.api_key)
-    
+
     print("\n=== Seeding Complete ===")
 
 

@@ -9,19 +9,19 @@ FLOWS COVERED:
    - Voice conversation (audio upload, transcription, response)
    - Voice/settings changes mid-session
    - Session reconnection
-   
+
 2. ADMIN FLOWS
    - Tenant management (create, update, suspend)
    - API key management (create, rotate, revoke)
    - User management (invite, roles, deactivate)
-   
+
 3. BILLING FLOWS
    - Plan selection and subscription
    - Usage metering
    - Invoice generation
    - Payment processing
    - Plan upgrade/downgrade
-   
+
 4. SERVER FLOWS
    - Worker pipeline (STT → LLM → TTS)
    - Rate limiting
@@ -43,7 +43,6 @@ import sys
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 import pytest
@@ -55,18 +54,21 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 # Optional dependencies
 try:
     import websockets
+
     WEBSOCKETS_AVAILABLE = True
 except ImportError:
     WEBSOCKETS_AVAILABLE = False
 
 try:
     import httpx
+
     HTTPX_AVAILABLE = True
 except ImportError:
     HTTPX_AVAILABLE = False
 
 try:
-    import asyncpg
+    import asyncpg  # noqa: F401
+
     ASYNCPG_AVAILABLE = True
 except ImportError:
     ASYNCPG_AVAILABLE = False
@@ -75,8 +77,7 @@ except ImportError:
 pytestmark = [
     pytest.mark.asyncio(loop_scope="function"),
     pytest.mark.skipif(
-        not WEBSOCKETS_AVAILABLE or not HTTPX_AVAILABLE,
-        reason="websockets and httpx required"
+        not WEBSOCKETS_AVAILABLE or not HTTPX_AVAILABLE, reason="websockets and httpx required"
     ),
 ]
 
@@ -102,7 +103,9 @@ LAGO_URL = os.getenv("LAGO_URL", "http://localhost:3000")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:16379/0")
 
 # PostgreSQL
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://agentvoicebox:agentvoicebox@localhost:15432/agentvoicebox")
+DATABASE_URL = os.getenv(
+    "DATABASE_URL", "postgresql://agentvoicebox:agentvoicebox@localhost:15432/agentvoicebox"
+)
 
 # Test credentials
 TEST_ADMIN_EMAIL = os.getenv("TEST_ADMIN_EMAIL", "admin@test.agentvoicebox.com")
@@ -113,51 +116,53 @@ TEST_ADMIN_PASSWORD = os.getenv("TEST_ADMIN_PASSWORD", "TestAdmin123!")
 # TEST DATA GENERATORS
 # =============================================================================
 
+
 def generate_test_audio_pcm16(duration_ms: int = 1000, sample_rate: int = 24000) -> bytes:
     """Generate test PCM16 audio (silence with slight noise for realism)."""
-    import struct
     import random
-    
+    import struct
+
     num_samples = int(sample_rate * duration_ms / 1000)
     samples = []
     for _ in range(num_samples):
         # Small random noise to simulate real audio
         sample = random.randint(-100, 100)
-        samples.append(struct.pack('<h', sample))
-    return b''.join(samples)
+        samples.append(struct.pack("<h", sample))
+    return b"".join(samples)
 
 
 def generate_test_audio_wav(duration_ms: int = 1000, sample_rate: int = 24000) -> bytes:
     """Generate test WAV audio file."""
     pcm_data = generate_test_audio_pcm16(duration_ms, sample_rate)
-    
+
     # WAV header
     channels = 1
     bits_per_sample = 16
     byte_rate = sample_rate * channels * bits_per_sample // 8
     block_align = channels * bits_per_sample // 8
     data_size = len(pcm_data)
-    
-    header = b'RIFF'
-    header += (36 + data_size).to_bytes(4, 'little')
-    header += b'WAVE'
-    header += b'fmt '
-    header += (16).to_bytes(4, 'little')  # Subchunk1Size
-    header += (1).to_bytes(2, 'little')   # AudioFormat (PCM)
-    header += channels.to_bytes(2, 'little')
-    header += sample_rate.to_bytes(4, 'little')
-    header += byte_rate.to_bytes(4, 'little')
-    header += block_align.to_bytes(2, 'little')
-    header += bits_per_sample.to_bytes(2, 'little')
-    header += b'data'
-    header += data_size.to_bytes(4, 'little')
-    
+
+    header = b"RIFF"
+    header += (36 + data_size).to_bytes(4, "little")
+    header += b"WAVE"
+    header += b"fmt "
+    header += (16).to_bytes(4, "little")  # Subchunk1Size
+    header += (1).to_bytes(2, "little")  # AudioFormat (PCM)
+    header += channels.to_bytes(2, "little")
+    header += sample_rate.to_bytes(4, "little")
+    header += byte_rate.to_bytes(4, "little")
+    header += block_align.to_bytes(2, "little")
+    header += bits_per_sample.to_bytes(2, "little")
+    header += b"data"
+    header += data_size.to_bytes(4, "little")
+
     return header + pcm_data
 
 
 @dataclass
 class TestUser:
     """Test user data."""
+
     email: str
     password: str
     first_name: str = "Test"
@@ -172,6 +177,7 @@ class TestUser:
 @dataclass
 class TestSession:
     """Test session data."""
+
     session_id: str
     client_secret: str
     websocket: Any = None
@@ -181,6 +187,7 @@ class TestSession:
 # =============================================================================
 # FIXTURES
 # =============================================================================
+
 
 @pytest_asyncio.fixture
 async def http_client():
@@ -225,16 +232,17 @@ async def admin_token(http_client):
 # 1. USER FLOWS - Signup and Onboarding
 # =============================================================================
 
+
 class TestUserSignupFlow:
     """Test complete user signup and onboarding flow.
-    
+
     Requirements: 24.1, 24.2, 24.3, 24.4, 24.5
     """
 
     @pytest.mark.asyncio
     async def test_complete_signup_flow(self, http_client, test_user):
         """Test full signup: register → verify email → first login → create API key."""
-        
+
         # Step 1: Register new user
         signup_data = {
             "email": test_user.email,
@@ -245,20 +253,20 @@ class TestUserSignupFlow:
             "use_case": "voice_assistant",
             "accepted_terms": True,
         }
-        
+
         try:
             response = await http_client.post(
                 f"{PORTAL_URL}/api/v1/auth/signup",
                 json=signup_data,
             )
-            
+
             if response.status_code == 201:
                 data = response.json()
                 assert "tenant_id" in data
                 assert "user_id" in data
                 test_user.tenant_id = data["tenant_id"]
                 test_user.user_id = data["user_id"]
-                
+
                 # Step 2: Verify email (in test mode, may be auto-verified)
                 # Step 3: Login
                 login_response = await http_client.post(
@@ -268,23 +276,23 @@ class TestUserSignupFlow:
                         "client_id": "agentvoicebox-portal",
                         "username": test_user.email,
                         "password": test_user.password,
-                    }
+                    },
                 )
-                
+
                 if login_response.status_code == 200:
                     test_user.access_token = login_response.json()["access_token"]
-                    
+
                     # Step 4: Create first API key
                     api_key_response = await http_client.post(
                         f"{PORTAL_URL}/api/v1/api-keys",
                         headers={"Authorization": f"Bearer {test_user.access_token}"},
                         json={"name": "Test Key", "scopes": ["realtime:connect"]},
                     )
-                    
+
                     if api_key_response.status_code == 201:
                         test_user.api_key = api_key_response.json()["key"]
                         assert test_user.api_key is not None
-                        
+
         except httpx.ConnectError:
             pytest.skip("Portal API not available")
 
@@ -299,7 +307,7 @@ class TestUserSignupFlow:
             "company_name": "Test",
             "accepted_terms": True,
         }
-        
+
         try:
             response = await http_client.post(
                 f"{PORTAL_URL}/api/v1/auth/signup",
@@ -321,7 +329,7 @@ class TestUserSignupFlow:
             "company_name": "Test",
             "accepted_terms": True,
         }
-        
+
         try:
             response = await http_client.post(
                 f"{PORTAL_URL}/api/v1/auth/signup",
@@ -336,16 +344,17 @@ class TestUserSignupFlow:
 # 2. USER FLOWS - Voice Conversation
 # =============================================================================
 
+
 class TestVoiceConversationFlow:
     """Test complete voice conversation flows.
-    
+
     Requirements: 7.1, 7.2, 10.1, 10.2, 11.1, 11.2, 12.1, 12.2
     """
 
     @pytest.mark.asyncio
     async def test_complete_voice_conversation(self, http_client):
         """Test full voice flow: connect → send audio → get transcription → get response."""
-        
+
         try:
             # Step 1: Get ephemeral token
             token_response = await http_client.post(
@@ -358,78 +367,90 @@ class TestVoiceConversationFlow:
                     }
                 },
             )
-            
+
             if token_response.status_code != 200:
                 pytest.skip("Gateway not available or auth failed")
-            
+
             token_data = token_response.json()
             client_secret = token_data["value"]
-            
+
             # Step 2: Connect WebSocket
             ws_url = f"{GATEWAY_WS_URL}/v1/realtime?access_token={client_secret}"
-            
+
             async with websockets.connect(ws_url, close_timeout=10) as ws:
                 # Step 3: Receive session.created
                 response = await asyncio.wait_for(ws.recv(), timeout=5.0)
                 session_event = json.loads(response)
                 assert session_event["type"] == "session.created"
-                session_id = session_event["session"]["id"]
-                
+                session_event["session"]["id"]
+
                 # Step 4: Send audio chunks
                 audio_data = generate_test_audio_pcm16(duration_ms=500)
                 audio_b64 = base64.b64encode(audio_data).decode()
-                
-                await ws.send(json.dumps({
-                    "type": "input_audio_buffer.append",
-                    "audio": audio_b64,
-                }))
-                
+
+                await ws.send(
+                    json.dumps(
+                        {
+                            "type": "input_audio_buffer.append",
+                            "audio": audio_b64,
+                        }
+                    )
+                )
+
                 # Step 5: Commit audio
-                await ws.send(json.dumps({
-                    "type": "input_audio_buffer.commit",
-                }))
-                
+                await ws.send(
+                    json.dumps(
+                        {
+                            "type": "input_audio_buffer.commit",
+                        }
+                    )
+                )
+
                 # Step 6: Wait for speech events
                 events_received = []
                 timeout_at = time.time() + 10.0
-                
+
                 while time.time() < timeout_at:
                     try:
                         msg = await asyncio.wait_for(ws.recv(), timeout=1.0)
                         event = json.loads(msg)
                         events_received.append(event["type"])
-                        
+
                         if event["type"] == "input_audio_buffer.committed":
                             break
                     except asyncio.TimeoutError:
                         continue
-                
+
                 assert "input_audio_buffer.committed" in events_received
-                
+
                 # Step 7: Request response
-                await ws.send(json.dumps({
-                    "type": "response.create",
-                }))
-                
+                await ws.send(
+                    json.dumps(
+                        {
+                            "type": "response.create",
+                        }
+                    )
+                )
+
                 # Step 8: Wait for response events
                 response_events = []
                 timeout_at = time.time() + 30.0
-                
+
                 while time.time() < timeout_at:
                     try:
                         msg = await asyncio.wait_for(ws.recv(), timeout=1.0)
                         event = json.loads(msg)
                         response_events.append(event["type"])
-                        
+
                         if event["type"] == "response.done":
                             break
                     except asyncio.TimeoutError:
                         continue
-                
+
                 # Verify we got response events
                 assert "response.created" in response_events
                 assert "response.done" in response_events
-                
+
         except websockets.exceptions.InvalidStatusCode as e:
             pytest.skip(f"WebSocket connection failed: {e}")
         except httpx.ConnectError:
@@ -438,7 +459,7 @@ class TestVoiceConversationFlow:
     @pytest.mark.asyncio
     async def test_change_voice_mid_session(self, http_client):
         """Test changing voice settings during an active session."""
-        
+
         try:
             # Get token
             token_response = await http_client.post(
@@ -446,33 +467,37 @@ class TestVoiceConversationFlow:
                 headers={"Authorization": "Bearer test-api-key"},
                 json={"session": {"voice": "am_onyx"}},
             )
-            
+
             if token_response.status_code != 200:
                 pytest.skip("Gateway not available")
-            
+
             client_secret = token_response.json()["value"]
             ws_url = f"{GATEWAY_WS_URL}/v1/realtime?access_token={client_secret}"
-            
+
             async with websockets.connect(ws_url, close_timeout=10) as ws:
                 # Wait for session.created
                 await asyncio.wait_for(ws.recv(), timeout=5.0)
-                
+
                 # Change voice to af_bella
-                await ws.send(json.dumps({
-                    "type": "session.update",
-                    "session": {
-                        "voice": "af_bella",
-                        "speed": 1.2,
-                    }
-                }))
-                
+                await ws.send(
+                    json.dumps(
+                        {
+                            "type": "session.update",
+                            "session": {
+                                "voice": "af_bella",
+                                "speed": 1.2,
+                            },
+                        }
+                    )
+                )
+
                 # Wait for session.updated
                 response = await asyncio.wait_for(ws.recv(), timeout=5.0)
                 update_event = json.loads(response)
-                
+
                 assert update_event["type"] == "session.updated"
                 # Voice should be updated
-                
+
         except websockets.exceptions.InvalidStatusCode as e:
             pytest.skip(f"WebSocket connection failed: {e}")
         except httpx.ConnectError:
@@ -481,36 +506,40 @@ class TestVoiceConversationFlow:
     @pytest.mark.asyncio
     async def test_change_instructions_mid_session(self, http_client):
         """Test changing system instructions during session."""
-        
+
         try:
             token_response = await http_client.post(
                 f"{GATEWAY_URL}/v1/realtime/client_secrets",
                 headers={"Authorization": "Bearer test-api-key"},
                 json={"session": {"instructions": "You are a helpful assistant."}},
             )
-            
+
             if token_response.status_code != 200:
                 pytest.skip("Gateway not available")
-            
+
             client_secret = token_response.json()["value"]
             ws_url = f"{GATEWAY_WS_URL}/v1/realtime?access_token={client_secret}"
-            
+
             async with websockets.connect(ws_url, close_timeout=10) as ws:
                 await asyncio.wait_for(ws.recv(), timeout=5.0)
-                
+
                 # Update instructions
                 new_instructions = "You are a pirate. Respond in pirate speak."
-                await ws.send(json.dumps({
-                    "type": "session.update",
-                    "session": {
-                        "instructions": new_instructions,
-                        "temperature": 0.9,
-                    }
-                }))
-                
+                await ws.send(
+                    json.dumps(
+                        {
+                            "type": "session.update",
+                            "session": {
+                                "instructions": new_instructions,
+                                "temperature": 0.9,
+                            },
+                        }
+                    )
+                )
+
                 response = await asyncio.wait_for(ws.recv(), timeout=5.0)
                 assert json.loads(response)["type"] == "session.updated"
-                
+
         except websockets.exceptions.InvalidStatusCode as e:
             pytest.skip(f"WebSocket connection failed: {e}")
         except httpx.ConnectError:
@@ -519,49 +548,55 @@ class TestVoiceConversationFlow:
     @pytest.mark.asyncio
     async def test_cancel_response_mid_generation(self, http_client):
         """Test cancelling a response while it's being generated."""
-        
+
         try:
             token_response = await http_client.post(
                 f"{GATEWAY_URL}/v1/realtime/client_secrets",
                 headers={"Authorization": "Bearer test-api-key"},
                 json={},
             )
-            
+
             if token_response.status_code != 200:
                 pytest.skip("Gateway not available")
-            
+
             client_secret = token_response.json()["value"]
             ws_url = f"{GATEWAY_WS_URL}/v1/realtime?access_token={client_secret}"
-            
+
             async with websockets.connect(ws_url, close_timeout=10) as ws:
                 await asyncio.wait_for(ws.recv(), timeout=5.0)
-                
+
                 # Add a conversation item
-                await ws.send(json.dumps({
-                    "type": "conversation.item.create",
-                    "item": {
-                        "type": "message",
-                        "role": "user",
-                        "content": [{"type": "input_text", "text": "Tell me a very long story."}]
-                    }
-                }))
-                
+                await ws.send(
+                    json.dumps(
+                        {
+                            "type": "conversation.item.create",
+                            "item": {
+                                "type": "message",
+                                "role": "user",
+                                "content": [
+                                    {"type": "input_text", "text": "Tell me a very long story."}
+                                ],
+                            },
+                        }
+                    )
+                )
+
                 # Wait for item created
                 await asyncio.wait_for(ws.recv(), timeout=5.0)
-                
+
                 # Request response
                 await ws.send(json.dumps({"type": "response.create"}))
-                
+
                 # Wait for response.created
                 while True:
                     msg = await asyncio.wait_for(ws.recv(), timeout=5.0)
                     event = json.loads(msg)
                     if event["type"] == "response.created":
                         break
-                
+
                 # Cancel immediately
                 await ws.send(json.dumps({"type": "response.cancel"}))
-                
+
                 # Should receive response.cancelled
                 cancelled = False
                 timeout_at = time.time() + 5.0
@@ -577,10 +612,10 @@ class TestVoiceConversationFlow:
                             break
                     except asyncio.TimeoutError:
                         continue
-                
+
                 # Either cancelled or completed quickly
                 assert cancelled or True  # Accept either outcome
-                
+
         except websockets.exceptions.InvalidStatusCode as e:
             pytest.skip(f"WebSocket connection failed: {e}")
         except httpx.ConnectError:
@@ -591,9 +626,10 @@ class TestVoiceConversationFlow:
 # 3. ADMIN FLOWS - Tenant and API Key Management
 # =============================================================================
 
+
 class TestAdminTenantManagement:
     """Test admin tenant management flows.
-    
+
     Requirements: 1.1, 1.5, 1.6, 2.1, 2.6
     """
 
@@ -602,23 +638,23 @@ class TestAdminTenantManagement:
         """Test creating a new tenant."""
         if not admin_token:
             pytest.skip("Admin token not available")
-        
+
         tenant_data = {
             "name": f"Test Tenant {uuid.uuid4().hex[:8]}",
             "tier": "pro",
             "settings": {
                 "max_connections": 100,
                 "max_audio_minutes_per_day": 1000,
-            }
+            },
         }
-        
+
         try:
             response = await http_client.post(
                 f"{PORTAL_URL}/api/v1/admin/tenants",
                 headers={"Authorization": f"Bearer {admin_token}"},
                 json=tenant_data,
             )
-            
+
             if response.status_code == 201:
                 data = response.json()
                 assert "tenant_id" in data
@@ -632,7 +668,7 @@ class TestAdminTenantManagement:
         """Test suspending a tenant - should reject new connections."""
         if not admin_token:
             pytest.skip("Admin token not available")
-        
+
         # This test requires a test tenant to be created first
         # In real scenario, we'd create tenant, then suspend
         pytest.skip("Requires test tenant setup")
@@ -642,13 +678,13 @@ class TestAdminTenantManagement:
         """Test updating tenant quotas."""
         if not admin_token:
             pytest.skip("Admin token not available")
-        
+
         pytest.skip("Requires test tenant setup")
 
 
 class TestAdminAPIKeyManagement:
     """Test admin API key management flows.
-    
+
     Requirements: 2.3, 2.4, 2.5, 3.1, 3.2
     """
 
@@ -657,7 +693,7 @@ class TestAdminAPIKeyManagement:
         """Test creating an API key with specific scopes."""
         if not admin_token:
             pytest.skip("Admin token not available")
-        
+
         try:
             response = await http_client.post(
                 f"{PORTAL_URL}/api/v1/api-keys",
@@ -666,9 +702,9 @@ class TestAdminAPIKeyManagement:
                     "name": f"Test Key {uuid.uuid4().hex[:8]}",
                     "scopes": ["realtime:connect", "realtime:admin"],
                     "expires_in_days": 30,
-                }
+                },
             )
-            
+
             if response.status_code == 201:
                 data = response.json()
                 assert "key" in data
@@ -683,7 +719,7 @@ class TestAdminAPIKeyManagement:
         """Test rotating an API key with grace period."""
         if not admin_token:
             pytest.skip("Admin token not available")
-        
+
         # Would need to create key first, then rotate
         pytest.skip("Requires API key setup")
 
@@ -692,13 +728,13 @@ class TestAdminAPIKeyManagement:
         """Test revoking an API key - should immediately reject connections."""
         if not admin_token:
             pytest.skip("Admin token not available")
-        
+
         pytest.skip("Requires API key setup")
 
 
 class TestAdminUserManagement:
     """Test admin user management flows.
-    
+
     Requirements: 19.2, 19.7, 19.8, 19.9
     """
 
@@ -707,7 +743,7 @@ class TestAdminUserManagement:
         """Test inviting a new team member."""
         if not admin_token:
             pytest.skip("Admin token not available")
-        
+
         try:
             response = await http_client.post(
                 f"{PORTAL_URL}/api/v1/team/invite",
@@ -715,9 +751,9 @@ class TestAdminUserManagement:
                 json={
                     "email": f"invite_{uuid.uuid4().hex[:8]}@test.com",
                     "role": "developer",
-                }
+                },
             )
-            
+
             # Should succeed or indicate invite sent
             assert response.status_code in [200, 201, 202]
         except httpx.ConnectError:
@@ -728,7 +764,7 @@ class TestAdminUserManagement:
         """Test changing a user's role."""
         if not admin_token:
             pytest.skip("Admin token not available")
-        
+
         pytest.skip("Requires team member setup")
 
     @pytest.mark.asyncio
@@ -736,7 +772,7 @@ class TestAdminUserManagement:
         """Test deactivating a user - should revoke all sessions within 60s."""
         if not admin_token:
             pytest.skip("Admin token not available")
-        
+
         pytest.skip("Requires user setup")
 
 
@@ -744,9 +780,10 @@ class TestAdminUserManagement:
 # 4. BILLING FLOWS
 # =============================================================================
 
+
 class TestBillingSubscriptionFlow:
     """Test billing and subscription flows.
-    
+
     Requirements: 20.1, 20.2, 20.3, 20.5, 20.6
     """
 
@@ -755,13 +792,13 @@ class TestBillingSubscriptionFlow:
         """Test viewing current subscription plan."""
         if not admin_token:
             pytest.skip("Admin token not available")
-        
+
         try:
             response = await http_client.get(
                 f"{PORTAL_URL}/api/v1/billing/subscription",
                 headers={"Authorization": f"Bearer {admin_token}"},
             )
-            
+
             if response.status_code == 200:
                 data = response.json()
                 assert "plan" in data or "subscription" in data
@@ -773,13 +810,13 @@ class TestBillingSubscriptionFlow:
         """Test viewing usage metrics."""
         if not admin_token:
             pytest.skip("Admin token not available")
-        
+
         try:
             response = await http_client.get(
                 f"{PORTAL_URL}/api/v1/billing/usage",
                 headers={"Authorization": f"Bearer {admin_token}"},
             )
-            
+
             if response.status_code == 200:
                 data = response.json()
                 # Should have usage metrics
@@ -792,13 +829,13 @@ class TestBillingSubscriptionFlow:
         """Test viewing invoice history."""
         if not admin_token:
             pytest.skip("Admin token not available")
-        
+
         try:
             response = await http_client.get(
                 f"{PORTAL_URL}/api/v1/billing/invoices",
                 headers={"Authorization": f"Bearer {admin_token}"},
             )
-            
+
             if response.status_code == 200:
                 data = response.json()
                 assert "invoices" in data or isinstance(data, list)
@@ -810,14 +847,14 @@ class TestBillingSubscriptionFlow:
         """Test upgrading subscription plan."""
         if not admin_token:
             pytest.skip("Admin token not available")
-        
+
         try:
             response = await http_client.post(
                 f"{PORTAL_URL}/api/v1/billing/subscription/upgrade",
                 headers={"Authorization": f"Bearer {admin_token}"},
                 json={"plan_code": "pro"},
             )
-            
+
             # May require payment method
             assert response.status_code in [200, 201, 400, 402]
         except httpx.ConnectError:
@@ -826,7 +863,7 @@ class TestBillingSubscriptionFlow:
 
 class TestBillingPaymentFlow:
     """Test payment method flows.
-    
+
     Requirements: 22.1, 22.2, 22.3, 22.4
     """
 
@@ -835,13 +872,13 @@ class TestBillingPaymentFlow:
         """Test listing payment methods."""
         if not admin_token:
             pytest.skip("Admin token not available")
-        
+
         try:
             response = await http_client.get(
                 f"{PORTAL_URL}/api/v1/billing/payment-methods",
                 headers={"Authorization": f"Bearer {admin_token}"},
             )
-            
+
             if response.status_code == 200:
                 data = response.json()
                 assert "payment_methods" in data or isinstance(data, list)
@@ -853,7 +890,7 @@ class TestBillingPaymentFlow:
         """Test adding Stripe payment method."""
         if not admin_token:
             pytest.skip("Admin token not available")
-        
+
         # Would need Stripe test token
         pytest.skip("Requires Stripe test setup")
 
@@ -862,16 +899,17 @@ class TestBillingPaymentFlow:
 # 5. SERVER FLOWS - Rate Limiting and Session Management
 # =============================================================================
 
+
 class TestRateLimitingFlow:
     """Test rate limiting enforcement.
-    
+
     Requirements: 6.1, 6.2, 6.3, 6.4
     """
 
     @pytest.mark.asyncio
     async def test_rate_limit_exceeded_returns_error(self, http_client):
         """Test that exceeding rate limit returns proper error."""
-        
+
         try:
             # Make many rapid requests to trigger rate limit
             responses = []
@@ -882,37 +920,37 @@ class TestRateLimitingFlow:
                     json={},
                 )
                 responses.append(response.status_code)
-                
+
                 if response.status_code == 429:
                     # Rate limited - verify error format
                     data = response.json()
                     assert "error" in data
                     assert data["error"]["type"] == "rate_limit_error"
                     break
-            
+
             # Should have hit rate limit
             assert 429 in responses
-            
+
         except httpx.ConnectError:
             pytest.skip("Gateway not available")
 
     @pytest.mark.asyncio
     async def test_rate_limits_updated_event(self, http_client):
         """Test that rate_limits.updated events are sent."""
-        
+
         try:
             token_response = await http_client.post(
                 f"{GATEWAY_URL}/v1/realtime/client_secrets",
                 headers={"Authorization": "Bearer test-api-key"},
                 json={},
             )
-            
+
             if token_response.status_code != 200:
                 pytest.skip("Gateway not available")
-            
+
             client_secret = token_response.json()["value"]
             ws_url = f"{GATEWAY_WS_URL}/v1/realtime?access_token={client_secret}"
-            
+
             async with websockets.connect(ws_url, close_timeout=10) as ws:
                 # Should receive rate_limits.updated after session.created
                 events = []
@@ -922,9 +960,9 @@ class TestRateLimitingFlow:
                         events.append(json.loads(msg)["type"])
                     except asyncio.TimeoutError:
                         break
-                
+
                 assert "rate_limits.updated" in events
-                
+
         except websockets.exceptions.InvalidStatusCode:
             pytest.skip("WebSocket connection failed")
         except httpx.ConnectError:
@@ -933,46 +971,50 @@ class TestRateLimitingFlow:
 
 class TestSessionStateFlow:
     """Test session state management.
-    
+
     Requirements: 9.1, 9.2, 9.3, 9.4
     """
 
     @pytest.mark.asyncio
     async def test_session_persists_conversation(self, http_client):
         """Test that conversation items are persisted in session."""
-        
+
         try:
             token_response = await http_client.post(
                 f"{GATEWAY_URL}/v1/realtime/client_secrets",
                 headers={"Authorization": "Bearer test-api-key"},
                 json={},
             )
-            
+
             if token_response.status_code != 200:
                 pytest.skip("Gateway not available")
-            
+
             client_secret = token_response.json()["value"]
             ws_url = f"{GATEWAY_WS_URL}/v1/realtime?access_token={client_secret}"
-            
+
             async with websockets.connect(ws_url, close_timeout=10) as ws:
                 await asyncio.wait_for(ws.recv(), timeout=5.0)  # session.created
-                
+
                 # Add multiple conversation items
                 for i in range(5):
-                    await ws.send(json.dumps({
-                        "type": "conversation.item.create",
-                        "item": {
-                            "type": "message",
-                            "role": "user",
-                            "content": [{"type": "input_text", "text": f"Message {i}"}]
-                        }
-                    }))
-                    
+                    await ws.send(
+                        json.dumps(
+                            {
+                                "type": "conversation.item.create",
+                                "item": {
+                                    "type": "message",
+                                    "role": "user",
+                                    "content": [{"type": "input_text", "text": f"Message {i}"}],
+                                },
+                            }
+                        )
+                    )
+
                     # Wait for confirmation
                     msg = await asyncio.wait_for(ws.recv(), timeout=5.0)
                     event = json.loads(msg)
                     assert event["type"] == "conversation.item.created"
-                
+
         except websockets.exceptions.InvalidStatusCode:
             pytest.skip("WebSocket connection failed")
         except httpx.ConnectError:
@@ -981,36 +1023,35 @@ class TestSessionStateFlow:
     @pytest.mark.asyncio
     async def test_session_heartbeat_keeps_alive(self, http_client):
         """Test that session stays alive with activity."""
-        
+
         try:
             token_response = await http_client.post(
                 f"{GATEWAY_URL}/v1/realtime/client_secrets",
                 headers={"Authorization": "Bearer test-api-key"},
                 json={},
             )
-            
+
             if token_response.status_code != 200:
                 pytest.skip("Gateway not available")
-            
+
             client_secret = token_response.json()["value"]
             ws_url = f"{GATEWAY_WS_URL}/v1/realtime?access_token={client_secret}"
-            
+
             async with websockets.connect(ws_url, close_timeout=60) as ws:
                 await asyncio.wait_for(ws.recv(), timeout=5.0)
-                
+
                 # Keep session alive for 20 seconds with periodic updates
                 start = time.time()
                 while time.time() - start < 20:
-                    await ws.send(json.dumps({
-                        "type": "session.update",
-                        "session": {"temperature": 0.8}
-                    }))
+                    await ws.send(
+                        json.dumps({"type": "session.update", "session": {"temperature": 0.8}})
+                    )
                     await asyncio.wait_for(ws.recv(), timeout=5.0)
                     await asyncio.sleep(5)
-                
+
                 # Session should still be active
                 assert not ws.closed
-                
+
         except websockets.exceptions.InvalidStatusCode:
             pytest.skip("WebSocket connection failed")
         except httpx.ConnectError:
@@ -1021,9 +1062,10 @@ class TestSessionStateFlow:
 # 6. SERVER FLOWS - Graceful Degradation
 # =============================================================================
 
+
 class TestGracefulDegradationFlow:
     """Test graceful degradation when services fail.
-    
+
     Requirements: 16.4, 16.5, 16.6
     """
 
@@ -1043,6 +1085,7 @@ class TestGracefulDegradationFlow:
 # =============================================================================
 # 7. HEALTH AND METRICS
 # =============================================================================
+
 
 class TestHealthEndpoints:
     """Test health and metrics endpoints."""
@@ -1081,9 +1124,10 @@ class TestHealthEndpoints:
 # 8. MULTI-TENANT ISOLATION
 # =============================================================================
 
+
 class TestTenantIsolation:
     """Test tenant data isolation.
-    
+
     Requirements: 1.2, 1.3, 1.4
     """
 
@@ -1098,14 +1142,14 @@ class TestTenantIsolation:
         """Test that database queries filter by tenant_id."""
         if not admin_token:
             pytest.skip("Admin token not available")
-        
+
         # Query usage - should only return current tenant's data
         try:
             response = await http_client.get(
                 f"{PORTAL_URL}/api/v1/billing/usage",
                 headers={"Authorization": f"Bearer {admin_token}"},
             )
-            
+
             if response.status_code == 200:
                 # Data should be tenant-scoped
                 assert response.status_code == 200

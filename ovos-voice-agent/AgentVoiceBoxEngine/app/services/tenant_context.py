@@ -9,6 +9,7 @@ This module provides:
 - TenantContext: Current request's tenant context
 - TenantIsolation: Utilities for enforcing tenant boundaries
 """
+
 from __future__ import annotations
 
 import logging
@@ -22,9 +23,7 @@ from flask import g
 logger = logging.getLogger(__name__)
 
 # Context variable for async-safe tenant context
-_tenant_context: ContextVar[Optional["TenantContext"]] = ContextVar(
-    "tenant_context", default=None
-)
+_tenant_context: ContextVar[Optional["TenantContext"]] = ContextVar("tenant_context", default=None)
 
 
 @dataclass

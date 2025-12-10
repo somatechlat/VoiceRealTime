@@ -8,13 +8,14 @@ Provides endpoints for:
 
 Requirements: 21.3, 21.5
 """
+
 from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from ..auth import UserContext, get_current_user
@@ -25,7 +26,7 @@ router = APIRouter()
 
 class UsageSummary(BaseModel):
     """Current period usage summary."""
-    
+
     api_requests: int = Field(description="Total API requests this period")
     audio_minutes_input: float = Field(description="Audio input minutes (STT)")
     audio_minutes_output: float = Field(description="Audio output minutes (TTS)")
@@ -38,7 +39,7 @@ class UsageSummary(BaseModel):
 
 class BillingSummary(BaseModel):
     """Current billing summary."""
-    
+
     plan_name: str = Field(description="Current plan name")
     plan_code: str = Field(description="Current plan code")
     amount_due_cents: int = Field(description="Amount due in cents")
@@ -49,7 +50,7 @@ class BillingSummary(BaseModel):
 
 class HealthStatus(BaseModel):
     """API health status."""
-    
+
     overall: str = Field(description="Overall health status")
     services: Dict[str, str] = Field(description="Individual service statuses")
     latency_ms: Dict[str, float] = Field(description="Service latencies in ms")
@@ -57,7 +58,7 @@ class HealthStatus(BaseModel):
 
 class ActivityItem(BaseModel):
     """Recent activity item."""
-    
+
     id: str
     type: str = Field(description="Activity type")
     description: str = Field(description="Activity description")
@@ -67,7 +68,7 @@ class ActivityItem(BaseModel):
 
 class DashboardResponse(BaseModel):
     """Complete dashboard response."""
-    
+
     usage: UsageSummary
     billing: BillingSummary
     health: HealthStatus
@@ -79,23 +80,23 @@ async def get_dashboard(
     user: UserContext = Depends(get_current_user),
 ) -> DashboardResponse:
     """Get complete dashboard data.
-    
+
     Returns usage summary, billing summary, health status, and recent activity.
     """
     tenant_id = user.tenant_id
-    
+
     # Get usage from Lago
     usage = await _get_usage_summary(tenant_id)
-    
+
     # Get billing from Lago
     billing = await _get_billing_summary(tenant_id)
-    
+
     # Get health status
     health = await _get_health_status()
-    
+
     # Get recent activity
     activity = await _get_recent_activity(tenant_id)
-    
+
     return DashboardResponse(
         usage=usage,
         billing=billing,
@@ -141,23 +142,24 @@ async def get_activity(
 # Internal Functions
 # =============================================================================
 
+
 async def _get_usage_summary(tenant_id: str) -> UsageSummary:
     """Get usage summary from Lago."""
     try:
         from ....app.services.lago_service import get_lago_service
-        
-        lago = get_lago_service()
-        
+
+        get_lago_service()
+
         # Get customer's current usage
         # In production, this would query Lago's usage API
         now = datetime.now(timezone.utc)
         period_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        
+
         if now.month == 12:
             period_end = period_start.replace(year=now.year + 1, month=1)
         else:
             period_end = period_start.replace(month=now.month + 1)
-        
+
         # Query Lago for usage (simplified - real implementation would use Lago API)
         return UsageSummary(
             api_requests=0,
@@ -169,7 +171,7 @@ async def _get_usage_summary(tenant_id: str) -> UsageSummary:
             period_start=period_start,
             period_end=period_end,
         )
-        
+
     except Exception as e:
         logger.error(f"Failed to get usage summary: {e}")
         now = datetime.now(timezone.utc)
@@ -189,14 +191,14 @@ async def _get_billing_summary(tenant_id: str) -> BillingSummary:
     """Get billing summary from Lago."""
     try:
         from ....app.services.lago_service import get_lago_service
-        
+
         lago = get_lago_service()
-        
+
         # Get customer's subscription
         subscriptions = await lago.list_subscriptions(
             external_customer_id=tenant_id,
         )
-        
+
         if subscriptions:
             sub = subscriptions[0]
             return BillingSummary(
@@ -207,7 +209,7 @@ async def _get_billing_summary(tenant_id: str) -> BillingSummary:
                 next_billing_date=sub.ending_at,
                 payment_status="current",
             )
-        
+
         return BillingSummary(
             plan_name="Free",
             plan_code="free",
@@ -216,7 +218,7 @@ async def _get_billing_summary(tenant_id: str) -> BillingSummary:
             next_billing_date=None,
             payment_status="current",
         )
-        
+
     except Exception as e:
         logger.error(f"Failed to get billing summary: {e}")
         return BillingSummary(
@@ -233,12 +235,13 @@ async def _get_health_status() -> HealthStatus:
     """Get API health status."""
     services = {}
     latencies = {}
-    
+
     # Check Redis
     try:
         import time
+
         from ....app.services.redis_client import get_redis_client
-        
+
         start = time.monotonic()
         redis = get_redis_client()
         await redis.ping()
@@ -247,12 +250,13 @@ async def _get_health_status() -> HealthStatus:
     except Exception:
         services["redis"] = "unhealthy"
         latencies["redis"] = -1
-    
+
     # Check PostgreSQL
     try:
         import time
+
         from ....app.services.async_database import get_database
-        
+
         start = time.monotonic()
         db = get_database()
         await db.execute("SELECT 1")
@@ -261,10 +265,10 @@ async def _get_health_status() -> HealthStatus:
     except Exception:
         services["postgresql"] = "unhealthy"
         latencies["postgresql"] = -1
-    
+
     # Determine overall status
     overall = "healthy" if all(s == "healthy" for s in services.values()) else "degraded"
-    
+
     return HealthStatus(
         overall=overall,
         services=services,
@@ -279,10 +283,10 @@ async def _get_recent_activity(
     """Get recent activity from audit logs."""
     try:
         from ....app.services.audit_service import get_audit_service
-        
+
         audit = get_audit_service()
         logs = await audit.get_recent_logs(tenant_id=tenant_id, limit=limit)
-        
+
         return [
             ActivityItem(
                 id=log.id,
@@ -293,7 +297,7 @@ async def _get_recent_activity(
             )
             for log in logs
         ]
-        
+
     except Exception as e:
         logger.error(f"Failed to get recent activity: {e}")
         return []

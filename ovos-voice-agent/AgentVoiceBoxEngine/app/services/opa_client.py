@@ -40,4 +40,5 @@ class OPAClient:
         """Close the underlying HTTP client."""
         self._client.close()
 
+
 __all__ = ["OPAClient"]

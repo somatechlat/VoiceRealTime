@@ -8,14 +8,12 @@ This module provides:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import signal
 import threading
 import time
-from dataclasses import dataclass, field
-from typing import Callable, Dict, Optional, Set
-from weakref import WeakSet
+from dataclasses import dataclass
+from typing import Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +21,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ConnectionInfo:
     """Information about an active connection."""
+
     session_id: str
     tenant_id: str
     connected_at: float
@@ -31,7 +30,7 @@ class ConnectionInfo:
 
 class ConnectionManager:
     """Manages active WebSocket connections for graceful shutdown.
-    
+
     Features:
     - Track all active connections
     - Graceful shutdown with configurable drain period
@@ -74,7 +73,7 @@ class ConnectionManager:
             )
         logger.debug(
             "Connection registered",
-            extra={"session_id": session_id, "total_connections": self.active_connection_count}
+            extra={"session_id": session_id, "total_connections": self.active_connection_count},
         )
 
     def unregister_connection(self, session_id: str) -> Optional[ConnectionInfo]:
@@ -84,7 +83,7 @@ class ConnectionManager:
         if info:
             logger.debug(
                 "Connection unregistered",
-                extra={"session_id": session_id, "total_connections": self.active_connection_count}
+                extra={"session_id": session_id, "total_connections": self.active_connection_count},
             )
         return info
 
@@ -104,7 +103,7 @@ class ConnectionManager:
 
     def initiate_shutdown(self) -> None:
         """Initiate graceful shutdown.
-        
+
         This method:
         1. Sets shutting_down flag (new connections should be rejected)
         2. Waits for drain_timeout for connections to close naturally
@@ -113,14 +112,14 @@ class ConnectionManager:
         """
         if self._shutting_down:
             return
-        
+
         self._shutting_down = True
         logger.info(
             "Initiating graceful shutdown",
             extra={
                 "drain_timeout_seconds": self._drain_timeout,
                 "active_connections": self.active_connection_count,
-            }
+            },
         )
 
         # Start drain period
@@ -133,11 +132,9 @@ class ConnectionManager:
             if count == 0:
                 logger.info("All connections drained successfully")
                 break
-            
+
             remaining = int(drain_end - time.time())
-            logger.info(
-                f"Draining connections: {count} remaining, {remaining}s left"
-            )
+            logger.info(f"Draining connections: {count} remaining, {remaining}s left")
             time.sleep(1)
 
         # Force close any remaining connections
@@ -149,7 +146,7 @@ class ConnectionManager:
             for conn in remaining_connections:
                 try:
                     # Try to close the WebSocket gracefully
-                    if hasattr(conn.websocket, 'close'):
+                    if hasattr(conn.websocket, "close"):
                         conn.websocket.close()
                 except Exception as e:
                     logger.warning(f"Error closing connection {conn.session_id}: {e}")
@@ -190,7 +187,7 @@ def init_connection_manager(drain_timeout_seconds: int = 30) -> ConnectionManage
 
 def setup_signal_handlers() -> None:
     """Set up signal handlers for graceful shutdown.
-    
+
     Handles:
     - SIGTERM: Kubernetes sends this before killing the pod
     - SIGINT: Ctrl+C in development
@@ -200,7 +197,7 @@ def setup_signal_handlers() -> None:
     def signal_handler(signum, frame):
         sig_name = signal.Signals(signum).name
         logger.info(f"Received {sig_name}, initiating graceful shutdown")
-        
+
         # Run shutdown in a separate thread to not block signal handler
         shutdown_thread = threading.Thread(
             target=manager.initiate_shutdown,
@@ -211,7 +208,7 @@ def setup_signal_handlers() -> None:
     # Register signal handlers
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
-    
+
     logger.info("Signal handlers registered for graceful shutdown")
 
 

@@ -35,12 +35,20 @@ from ..dependencies import (
     get_session_service,
     get_token_service,
 )
-from ..services.distributed_rate_limiter import count_tokens
-from ..services.distributed_session import DistributedSessionManager, Session as RedisSession, SessionConfig as RedisSessionConfig
-from ..services.redis_streams import RedisStreamsClient, AudioSTTRequest, TTSRequest
 from ..models.session import SessionModel
 from ..observability.metrics import policy_denials
 from ..schemas.realtime import RealtimeSessionResource
+from ..services.distributed_rate_limiter import count_tokens
+from ..services.distributed_session import (
+    DistributedSessionManager,
+)
+from ..services.distributed_session import (
+    Session as RedisSession,
+)
+from ..services.distributed_session import (
+    SessionConfig as RedisSessionConfig,
+)
+from ..services.redis_streams import AudioSTTRequest, RedisStreamsClient, TTSRequest
 from ..services.session_service import SessionService
 from ..services.token_service import ClientSecretRecord
 from ..tts.provider import get_provider  # TTS provider abstraction
@@ -79,7 +87,12 @@ def register_realtime_websocket(app) -> None:
             return
         token_record = token_service.get(secret)
         if token_record is None:
-            _send_error(ws, "authentication_error", "invalid_client_secret", "Client secret invalid or expired")
+            _send_error(
+                ws,
+                "authentication_error",
+                "invalid_client_secret",
+                "Client secret invalid or expired",
+            )
             ws.close()
             return
 
@@ -104,7 +117,7 @@ def register_realtime_websocket(app) -> None:
 
         # Get distributed session manager (Redis-backed for real-time state)
         distributed_session_manager = get_distributed_session_manager()
-        
+
         # Create session in PostgreSQL (source of truth for persistence)
         session_model = session_service.get_session(token_record.session_id)
         if session_model is None:
@@ -126,7 +139,9 @@ def register_realtime_websocket(app) -> None:
                     voice=token_record.session_config.get("voice", "am_onyx"),
                     speed=float(token_record.session_config.get("speed", 1.1)),
                     temperature=float(token_record.session_config.get("temperature", 0.8)),
-                    instructions=token_record.session_config.get("instructions", "You are a helpful assistant."),
+                    instructions=token_record.session_config.get(
+                        "instructions", "You are a helpful assistant."
+                    ),
                     tools=token_record.session_config.get("tools", []),
                 )
                 redis_session = _run_async(
@@ -142,16 +157,21 @@ def register_realtime_websocket(app) -> None:
 
         # Get distributed rate limiter (falls back to None if Redis unavailable)
         rate_limiter = get_rate_limiter()
-        
+
         # Get connection manager for tracking and graceful shutdown
         connection_manager = get_connection_manager()
-        
+
         # Check if server is shutting down - reject new connections
         if connection_manager and connection_manager.is_shutting_down:
-            _send_error(ws, "api_error", "server_shutting_down", "Server is shutting down, please reconnect to another instance")
+            _send_error(
+                ws,
+                "api_error",
+                "server_shutting_down",
+                "Server is shutting down, please reconnect to another instance",
+            )
             ws.close()
             return
-        
+
         # Register this connection for tracking
         if connection_manager:
             connection_manager.register_connection(
@@ -254,7 +274,7 @@ def _session_resource(model: SessionModel) -> Dict[str, Any]:
 
 def _rate_limits_payload(rate_limits, rate_limit_result=None) -> Dict[str, Any]:
     """Build rate_limits.updated event payload.
-    
+
     Args:
         rate_limits: RateLimitSettings from config (for limits)
         rate_limit_result: Optional RateLimitResult (for remaining)
@@ -329,15 +349,15 @@ class RealtimeWebsocketConnection:
             "Realtime connection established",
             extra={"session_id": self._session.id, "project_id": self._token.project_id},
         )
-        
+
         # Update Redis session status to connected
         self._update_redis_session({"status": "connected"})
-        
+
         self._send_event({"type": "session.created", "session": _session_resource(self._session)})
         self._send_event(_rate_limits_payload(self._config.security.rate_limits))
 
         last_heartbeat = time.time()
-        
+
         while True:
             try:
                 message = self._ws.receive(timeout=1.0)
@@ -392,7 +412,7 @@ class RealtimeWebsocketConnection:
                     "internal_error",
                     "Internal error processing event",
                 )
-        
+
         # Connection closed - cleanup Redis session
         self._close_redis_session()
 
@@ -431,7 +451,7 @@ class RealtimeWebsocketConnection:
         """Close session in Redis on disconnect."""
         # Cleanup worker streams first
         self._cleanup_worker_streams()
-        
+
         if self._distributed_session_manager is None:
             return
         try:
@@ -461,19 +481,21 @@ class RealtimeWebsocketConnection:
 
     # Worker communication ----------------------------------------------------------
 
-    def _publish_audio_for_stt(self, audio_b64: str, language: Optional[str] = None) -> Optional[str]:
+    def _publish_audio_for_stt(
+        self, audio_b64: str, language: Optional[str] = None
+    ) -> Optional[str]:
         """Publish audio to STT worker via Redis Streams.
-        
+
         Args:
             audio_b64: Base64 encoded audio data
             language: Optional language hint
-            
+
         Returns:
             Message ID if published, None if streams not available
         """
         if self._streams_client is None:
             return None
-        
+
         try:
             request = AudioSTTRequest(
                 session_id=self._session.id,
@@ -495,20 +517,20 @@ class RealtimeWebsocketConnection:
         item_id: str = "",
     ) -> Optional[str]:
         """Publish text to TTS worker via Redis Streams.
-        
+
         Args:
             text: Text to synthesize
             voice: Voice ID
             speed: Speech speed
             response_id: Response ID for correlation
             item_id: Item ID for correlation
-            
+
         Returns:
             Message ID if published, None if streams not available
         """
         if self._streams_client is None:
             return None
-        
+
         try:
             request = TTSRequest(
                 session_id=self._session.id,
@@ -528,7 +550,7 @@ class RealtimeWebsocketConnection:
         """Signal TTS cancellation to workers."""
         if self._streams_client is None:
             return
-        
+
         try:
             _run_async(self._streams_client.cancel_tts(self._session.id))
         except Exception as e:
@@ -538,7 +560,7 @@ class RealtimeWebsocketConnection:
         """Clean up worker streams on session close."""
         if self._streams_client is None:
             return
-        
+
         try:
             _run_async(self._streams_client.cleanup_session_streams(self._session.id))
         except Exception as e:
@@ -548,7 +570,7 @@ class RealtimeWebsocketConnection:
 
     def _check_rate_limit(self, payload: Dict[str, Any]) -> bool:
         """Check rate limits before processing an event.
-        
+
         Returns True if request is allowed, False if rate limited.
         """
         if self._rate_limiter is None:
@@ -558,7 +580,7 @@ class RealtimeWebsocketConnection:
         # Estimate tokens for this request
         tokens = 1
         event_type = payload.get("type", "")
-        
+
         # Count tokens for text content
         if event_type == "conversation.item.create":
             item = payload.get("item", {})
@@ -590,16 +612,12 @@ class RealtimeWebsocketConnection:
                     "Rate limit exceeded. Please slow down.",
                 )
                 # Send updated rate limits
-                self._send_event(
-                    _rate_limits_payload(self._config.security.rate_limits, result)
-                )
+                self._send_event(_rate_limits_payload(self._config.security.rate_limits, result))
                 return False
 
             # Periodically send rate limit updates
             if result and result.requests_remaining % 10 == 0:
-                self._send_event(
-                    _rate_limits_payload(self._config.security.rate_limits, result)
-                )
+                self._send_event(_rate_limits_payload(self._config.security.rate_limits, result))
 
             return True
 
@@ -683,7 +701,9 @@ class RealtimeWebsocketConnection:
         self._send_event(
             {
                 "type": "input_audio_buffer.committed",
-                "previous_item_id": None if not self._conversation_order else self._conversation_order[-1],
+                "previous_item_id": (
+                    None if not self._conversation_order else self._conversation_order[-1]
+                ),
                 "item_id": audio_item_id,
             }
         )
@@ -691,7 +711,9 @@ class RealtimeWebsocketConnection:
         self._send_event(
             {
                 "type": "input_audio_buffer.commit",
-                "previous_item_id": None if not self._conversation_order else self._conversation_order[-1],
+                "previous_item_id": (
+                    None if not self._conversation_order else self._conversation_order[-1]
+                ),
                 "item_id": audio_item_id,
             }
         )
@@ -700,7 +722,11 @@ class RealtimeWebsocketConnection:
         item = payload.get("item", {})
         role = item.get("role", "user")
         content = item.get("content") or []
-        metadata = {k: v for k, v in item.items() if k not in {"role", "content", "id", "object", "type", "status"}}
+        metadata = {
+            k: v
+            for k, v in item.items()
+            if k not in {"role", "content", "id", "object", "type", "status"}
+        }
 
         self._emit_conversation_item(role, content, metadata=metadata)
 
@@ -755,7 +781,9 @@ class RealtimeWebsocketConnection:
             }
         )
 
-        self._emit_conversation_item("assistant", response_item["content"], metadata={"id": item_id})
+        self._emit_conversation_item(
+            "assistant", response_item["content"], metadata={"id": item_id}
+        )
 
         self._send_event(
             {
@@ -777,8 +805,10 @@ class RealtimeWebsocketConnection:
         # Gather session‑level TTS overrides (voice, speed) – the provider will
         # fall back to environment defaults if these are ``None``.
         sess_cfg = (
-            self._session.session_config or {}
-        ).get("tts", {}) if hasattr(self._session, "session_config") else {}
+            (self._session.session_config or {}).get("tts", {})
+            if hasattr(self._session, "session_config")
+            else {}
+        )
         sess_voice = sess_cfg.get("voice") if isinstance(sess_cfg, dict) else None
         sess_speed = sess_cfg.get("speed") if isinstance(sess_cfg, dict) else None
 
@@ -823,9 +853,7 @@ class RealtimeWebsocketConnection:
         try:
             _run_provider()
         except Exception as exc:  # pragma: no cover – defensive
-            logger.warning(
-                "TTS provider failed, falling back to silence", exc_info=exc
-            )
+            logger.warning("TTS provider failed, falling back to silence", exc_info=exc)
 
         # If the provider yielded nothing (e.g., all engines unavailable),
         # send a tiny silence buffer so the client still receives a response.
@@ -864,10 +892,10 @@ class RealtimeWebsocketConnection:
         # Mark cancel and notify client
         self._cancel_current = True
         response_id = payload.get("response_id") or _generate_response_id()
-        
+
         # Cancel TTS workers if using distributed mode
         self._cancel_tts_worker()
-        
+
         self._send_event({"type": "response.cancelled", "response_id": response_id})
 
     # Internal helpers ----------------------------------------------------------------
@@ -893,7 +921,7 @@ class RealtimeWebsocketConnection:
 
         # Write to Redis (fast, for real-time access)
         self._append_to_redis_conversation(item)
-        
+
         # Write to PostgreSQL (durable, source of truth)
         self._session_service.append_conversation_item(self._session.id, item)
 
@@ -941,6 +969,7 @@ def _run_async(coro):
     """Run an async coroutine from sync context with a fresh event loop if needed."""
     try:
         import asyncio
+
         try:
             return asyncio.run(coro)
         except RuntimeError:
@@ -962,6 +991,7 @@ def _call_llm(session_id: str, user_text: str) -> Optional[str]:
         import importlib
         import os
         import sys
+
         # Add repo root to path: this file is enterprise/app/transports/realtime_ws.py
         here = os.path.dirname(__file__)
         repo_root = os.path.abspath(os.path.join(here, "../../..", ".."))

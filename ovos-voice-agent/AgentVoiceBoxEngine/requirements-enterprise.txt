@@ -1,5 +1,8 @@
 # Enterprise dependencies for OVOS voice agent gateway
 Flask>=3.0.0
+# FastAPI for portal API (Requirements 21.1, 21.2)
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
 # Redis async client for distributed session management (Requirements 9.1, 9.2)
 redis>=5.0.0
 Flask-Sock>=0.7.0

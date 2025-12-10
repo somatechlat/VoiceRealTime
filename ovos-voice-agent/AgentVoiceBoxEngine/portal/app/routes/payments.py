@@ -8,6 +8,7 @@ Provides endpoints for:
 
 Requirements: 22.3, 22.4, 22.6
 """
+
 from __future__ import annotations
 
 import logging
@@ -25,7 +26,7 @@ router = APIRouter()
 
 class PaymentMethodResponse(BaseModel):
     """Payment method details."""
-    
+
     id: str = Field(description="Payment method ID")
     type: str = Field(description="Payment method type (card, bank_account, paypal)")
     provider: str = Field(description="Payment provider (stripe, paypal)")
@@ -39,7 +40,7 @@ class PaymentMethodResponse(BaseModel):
 
 class AddPaymentMethodRequest(BaseModel):
     """Request to add a payment method."""
-    
+
     provider: str = Field(description="Payment provider (stripe, paypal)")
     payment_method_id: str = Field(description="Provider-specific payment method ID")
     set_default: bool = Field(default=True, description="Set as default method")
@@ -47,7 +48,7 @@ class AddPaymentMethodRequest(BaseModel):
 
 class SetDefaultRequest(BaseModel):
     """Request to set default payment method."""
-    
+
     payment_method_id: str = Field(description="Payment method ID to set as default")
 
 
@@ -57,59 +58,63 @@ async def list_payment_methods(
 ) -> List[PaymentMethodResponse]:
     """List all payment methods for the tenant."""
     try:
-        from ....app.services.payment_service import get_payment_service, PaymentProvider
-        
+        from ....app.services.payment_service import PaymentProvider, get_payment_service
+
         service = get_payment_service()
         methods = []
-        
+
         # Get methods from Stripe
         try:
             stripe_methods = await service.list_payment_methods(
                 customer_id=user.tenant_id,
                 provider=PaymentProvider.STRIPE,
             )
-            methods.extend([
-                PaymentMethodResponse(
-                    id=m.id,
-                    type=m.type,
-                    provider="stripe",
-                    last_four=m.last_four,
-                    brand=m.brand,
-                    exp_month=m.exp_month,
-                    exp_year=m.exp_year,
-                    is_default=m.is_default,
-                    created_at=m.created_at,
-                )
-                for m in stripe_methods
-            ])
+            methods.extend(
+                [
+                    PaymentMethodResponse(
+                        id=m.id,
+                        type=m.type,
+                        provider="stripe",
+                        last_four=m.last_four,
+                        brand=m.brand,
+                        exp_month=m.exp_month,
+                        exp_year=m.exp_year,
+                        is_default=m.is_default,
+                        created_at=m.created_at,
+                    )
+                    for m in stripe_methods
+                ]
+            )
         except Exception as e:
             logger.warning(f"Failed to get Stripe methods: {e}")
-        
+
         # Get methods from PayPal
         try:
             paypal_methods = await service.list_payment_methods(
                 customer_id=user.tenant_id,
                 provider=PaymentProvider.PAYPAL,
             )
-            methods.extend([
-                PaymentMethodResponse(
-                    id=m.id,
-                    type=m.type,
-                    provider="paypal",
-                    last_four=m.last_four,
-                    brand=m.brand,
-                    exp_month=m.exp_month,
-                    exp_year=m.exp_year,
-                    is_default=m.is_default,
-                    created_at=m.created_at,
-                )
-                for m in paypal_methods
-            ])
+            methods.extend(
+                [
+                    PaymentMethodResponse(
+                        id=m.id,
+                        type=m.type,
+                        provider="paypal",
+                        last_four=m.last_four,
+                        brand=m.brand,
+                        exp_month=m.exp_month,
+                        exp_year=m.exp_year,
+                        is_default=m.is_default,
+                        created_at=m.created_at,
+                    )
+                    for m in paypal_methods
+                ]
+            )
         except Exception as e:
             logger.warning(f"Failed to get PayPal methods: {e}")
-        
+
         return methods
-        
+
     except Exception as e:
         logger.error(f"Failed to list payment methods: {e}")
         raise HTTPException(
@@ -118,21 +123,23 @@ async def list_payment_methods(
         )
 
 
-@router.post("/payments/methods", response_model=PaymentMethodResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/payments/methods", response_model=PaymentMethodResponse, status_code=status.HTTP_201_CREATED
+)
 async def add_payment_method(
     request: AddPaymentMethodRequest,
     user: UserContext = Depends(require_admin()),
 ) -> PaymentMethodResponse:
     """Add a new payment method.
-    
+
     Requires tenant_admin role.
     The payment_method_id should be obtained from Stripe Elements or PayPal SDK.
     """
     try:
-        from ....app.services.payment_service import get_payment_service, PaymentProvider
-        
+        from ....app.services.payment_service import PaymentProvider, get_payment_service
+
         service = get_payment_service()
-        
+
         # Determine provider
         if request.provider.lower() == "stripe":
             provider = PaymentProvider.STRIPE
@@ -143,14 +150,14 @@ async def add_payment_method(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid provider: {request.provider}",
             )
-        
+
         # Attach payment method
         method = await service.get_provider(provider).attach_payment_method(
             customer_id=user.tenant_id,
             payment_method_id=request.payment_method_id,
             set_default=request.set_default,
         )
-        
+
         return PaymentMethodResponse(
             id=method.id,
             type=method.type,
@@ -162,7 +169,7 @@ async def add_payment_method(
             is_default=method.is_default,
             created_at=method.created_at,
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -173,21 +180,23 @@ async def add_payment_method(
         )
 
 
-@router.delete("/payments/methods/{method_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+@router.delete(
+    "/payments/methods/{method_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None
+)
 async def remove_payment_method(
     method_id: str,
     provider: str,
     user: UserContext = Depends(require_admin()),
 ):
     """Remove a payment method.
-    
+
     Requires tenant_admin role.
     """
     try:
-        from ....app.services.payment_service import get_payment_service, PaymentProvider
-        
+        from ....app.services.payment_service import PaymentProvider, get_payment_service
+
         service = get_payment_service()
-        
+
         # Determine provider
         if provider.lower() == "stripe":
             prov = PaymentProvider.STRIPE
@@ -198,9 +207,9 @@ async def remove_payment_method(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid provider: {provider}",
             )
-        
+
         await service.get_provider(prov).detach_payment_method(method_id)
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -217,14 +226,14 @@ async def set_default_payment_method(
     user: UserContext = Depends(require_admin()),
 ) -> PaymentMethodResponse:
     """Set the default payment method.
-    
+
     Requires tenant_admin role.
     """
     try:
-        from ....app.services.payment_service import get_payment_service, PaymentProvider
-        
+        from ....app.services.payment_service import PaymentProvider, get_payment_service
+
         service = get_payment_service()
-        
+
         # Try to find and update the payment method
         # In production, we'd need to track which provider owns which method
         method = await service.get_provider(PaymentProvider.STRIPE).attach_payment_method(
@@ -232,7 +241,7 @@ async def set_default_payment_method(
             payment_method_id=request.payment_method_id,
             set_default=True,
         )
-        
+
         return PaymentMethodResponse(
             id=method.id,
             type=method.type,
@@ -244,7 +253,7 @@ async def set_default_payment_method(
             is_default=True,
             created_at=method.created_at,
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:

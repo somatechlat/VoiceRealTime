@@ -16,8 +16,7 @@ config = context.config
 
 # Override sqlalchemy.url from environment
 database_url = os.getenv(
-    "DATABASE_URL",
-    os.getenv("DATABASE__URI", config.get_main_option("sqlalchemy.url"))
+    "DATABASE_URL", os.getenv("DATABASE__URI", config.get_main_option("sqlalchemy.url"))
 )
 config.set_main_option("sqlalchemy.url", database_url)
 

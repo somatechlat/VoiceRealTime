@@ -31,22 +31,23 @@ sys.path.insert(0, _app_root)
 
 # Import directly from module file to avoid loading app/__init__.py (which imports Flask)
 try:
-    import asyncpg
+    import asyncpg  # noqa: F401
+
     ASYNCPG_AVAILABLE = True
 except ImportError:
     ASYNCPG_AVAILABLE = False
 
 if ASYNCPG_AVAILABLE:
     import importlib.util
+
     _spec = importlib.util.spec_from_file_location(
-        "async_database",
-        os.path.join(_app_root, "app", "services", "async_database.py")
+        "async_database", os.path.join(_app_root, "app", "services", "async_database.py")
     )
     _async_db_module = importlib.util.module_from_spec(_spec)
     # Register module in sys.modules BEFORE exec to fix Python 3.12 dataclass issue
     sys.modules["async_database"] = _async_db_module
     _spec.loader.exec_module(_async_db_module)
-    
+
     AsyncDatabaseClient = _async_db_module.AsyncDatabaseClient
     AsyncDatabaseConfig = _async_db_module.AsyncDatabaseConfig
     AsyncConversationRepository = _async_db_module.AsyncConversationRepository
@@ -66,7 +67,7 @@ pytestmark = [
 # Database URL from environment or default (port 15432 to avoid conflicts)
 DATABASE_URL = os.getenv(
     "DATABASE_URI",
-    "postgresql://agentvoicebox:agentvoicebox_secure_pwd_2024@localhost:15432/agentvoicebox"
+    "postgresql://agentvoicebox:agentvoicebox_secure_pwd_2024@localhost:15432/agentvoicebox",
 )
 
 
@@ -97,20 +98,19 @@ async def setup_test_tables(db_client):
         role VARCHAR(64) NOT NULL,
         content JSONB DEFAULT '{}',
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-        CONSTRAINT idx_conversation_items_session_tenant 
+        CONSTRAINT idx_conversation_items_session_tenant
             UNIQUE (session_id, tenant_id, id)
     );
-    CREATE INDEX IF NOT EXISTS ix_conversation_items_session 
+    CREATE INDEX IF NOT EXISTS ix_conversation_items_session
         ON conversation_items(session_id);
-    CREATE INDEX IF NOT EXISTS ix_conversation_items_tenant 
+    CREATE INDEX IF NOT EXISTS ix_conversation_items_tenant
         ON conversation_items(tenant_id);
-    CREATE INDEX IF NOT EXISTS ix_conversation_items_created 
+    CREATE INDEX IF NOT EXISTS ix_conversation_items_created
         ON conversation_items(created_at);
     """
     await db_client.execute(create_table_sql)
     yield
     # Cleanup is handled per-test
-
 
 
 class TestDatabaseConnection:
@@ -132,9 +132,10 @@ class TestDatabaseConnection:
     @pytest.mark.asyncio
     async def test_connection_pool_under_load(self, db_client):
         """Test connection pool handles concurrent queries.
-        
+
         Simulates 50 concurrent queries to verify pool management.
         """
+
         async def run_query(i: int):
             result = await db_client.fetchval("SELECT $1::int", i)
             return result
@@ -148,7 +149,7 @@ class TestDatabaseConnection:
 
 class TestTenantIsolation:
     """Test tenant isolation in PostgreSQL.
-    
+
     Requirements: 1.2, 1.3, 13.2
     """
 
@@ -190,9 +191,7 @@ class TestTenantIsolation:
         assert items_b[0].content["text"] == "Message from Tenant B"
 
         # Cleanup
-        await db_client.execute(
-            "DELETE FROM conversation_items WHERE session_id = $1", session_id
-        )
+        await db_client.execute("DELETE FROM conversation_items WHERE session_id = $1", session_id)
 
     @pytest.mark.asyncio
     async def test_tenant_filter_enforced_on_all_queries(
@@ -233,24 +232,19 @@ class TestTenantIsolation:
         assert other_count == 3, f"Expected 3 items for other tenant, got {other_count}"
 
         # Cleanup
-        await db_client.execute(
-            "DELETE FROM conversation_items WHERE session_id = $1", session_id
-        )
-
+        await db_client.execute("DELETE FROM conversation_items WHERE session_id = $1", session_id)
 
 
 class TestConversationItemPersistence:
     """Test conversation item persistence and retrieval.
-    
+
     Requirements: 13.5, 9.5
-    Property 9: Message Persistence - For any conversation item created, 
+    Property 9: Message Persistence - For any conversation item created,
     it SHALL be persisted to PostgreSQL within 1 second and be queryable thereafter.
     """
 
     @pytest.mark.asyncio
-    async def test_create_and_retrieve_item(
-        self, db_client, conversation_repo, setup_test_tables
-    ):
+    async def test_create_and_retrieve_item(self, db_client, conversation_repo, setup_test_tables):
         """Test creating and retrieving a conversation item."""
         tenant_id = uuid.uuid4()
         session_id = f"sess_{uuid.uuid4().hex[:16]}"
@@ -286,14 +280,10 @@ class TestConversationItemPersistence:
         assert retrieve_latency_ms < 100, f"Retrieve latency {retrieve_latency_ms}ms exceeds 100ms"
 
         # Cleanup
-        await db_client.execute(
-            "DELETE FROM conversation_items WHERE session_id = $1", session_id
-        )
+        await db_client.execute("DELETE FROM conversation_items WHERE session_id = $1", session_id)
 
     @pytest.mark.asyncio
-    async def test_batch_create_items(
-        self, db_client, conversation_repo, setup_test_tables
-    ):
+    async def test_batch_create_items(self, db_client, conversation_repo, setup_test_tables):
         """Test batch creation of conversation items."""
         tenant_id = uuid.uuid4()
         session_id = f"sess_{uuid.uuid4().hex[:16]}"
@@ -323,14 +313,10 @@ class TestConversationItemPersistence:
         assert len(retrieved) == 50
 
         # Cleanup
-        await db_client.execute(
-            "DELETE FROM conversation_items WHERE session_id = $1", session_id
-        )
+        await db_client.execute("DELETE FROM conversation_items WHERE session_id = $1", session_id)
 
     @pytest.mark.asyncio
-    async def test_get_last_n_items(
-        self, db_client, conversation_repo, setup_test_tables
-    ):
+    async def test_get_last_n_items(self, db_client, conversation_repo, setup_test_tables):
         """Test retrieving last N items with proper ordering."""
         tenant_id = uuid.uuid4()
         session_id = f"sess_{uuid.uuid4().hex[:16]}"
@@ -362,15 +348,12 @@ class TestConversationItemPersistence:
         assert latency_ms < 100, f"Query latency {latency_ms}ms exceeds 100ms"
 
         # Cleanup
-        await db_client.execute(
-            "DELETE FROM conversation_items WHERE session_id = $1", session_id
-        )
-
+        await db_client.execute("DELETE FROM conversation_items WHERE session_id = $1", session_id)
 
 
 class TestAuditLogPersistence:
     """Test audit log writes and queries.
-    
+
     Requirements: 1.7, 15.5
     """
 
@@ -391,11 +374,11 @@ class TestAuditLogPersistence:
             user_agent TEXT,
             created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
         );
-        CREATE INDEX IF NOT EXISTS ix_audit_logs_tenant 
+        CREATE INDEX IF NOT EXISTS ix_audit_logs_tenant
             ON audit_logs(tenant_id);
-        CREATE INDEX IF NOT EXISTS ix_audit_logs_action 
+        CREATE INDEX IF NOT EXISTS ix_audit_logs_action
             ON audit_logs(tenant_id, action);
-        CREATE INDEX IF NOT EXISTS ix_audit_logs_created 
+        CREATE INDEX IF NOT EXISTS ix_audit_logs_created
             ON audit_logs(tenant_id, created_at);
         """
         await db_client.execute(create_table_sql)
@@ -407,7 +390,7 @@ class TestAuditLogPersistence:
         tenant_id = uuid.uuid4()
 
         insert_sql = """
-        INSERT INTO audit_logs 
+        INSERT INTO audit_logs
             (tenant_id, actor_id, action, resource_type, resource_id, details, ip_address)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING id
@@ -427,9 +410,7 @@ class TestAuditLogPersistence:
         assert log_id is not None
 
         # Verify retrieval
-        record = await db_client.fetchrow(
-            "SELECT * FROM audit_logs WHERE id = $1", log_id
-        )
+        record = await db_client.fetchrow("SELECT * FROM audit_logs WHERE id = $1", log_id)
 
         assert record["tenant_id"] == tenant_id
         assert record["action"] == "api_key.created"
@@ -451,26 +432,18 @@ class TestAuditLogPersistence:
 
         # Create logs for tenant A
         for i in range(5):
-            await db_client.execute(
-                insert_sql, tenant_a, f"user_{i}", "tenant.updated", "tenant"
-            )
+            await db_client.execute(insert_sql, tenant_a, f"user_{i}", "tenant.updated", "tenant")
 
         # Create logs for tenant B
         for i in range(3):
-            await db_client.execute(
-                insert_sql, tenant_b, f"user_{i}", "project.created", "project"
-            )
+            await db_client.execute(insert_sql, tenant_b, f"user_{i}", "project.created", "project")
 
         # Query tenant A logs
-        logs_a = await db_client.fetch(
-            "SELECT * FROM audit_logs WHERE tenant_id = $1", tenant_a
-        )
+        logs_a = await db_client.fetch("SELECT * FROM audit_logs WHERE tenant_id = $1", tenant_a)
         assert len(logs_a) == 5
 
         # Query tenant B logs
-        logs_b = await db_client.fetch(
-            "SELECT * FROM audit_logs WHERE tenant_id = $1", tenant_b
-        )
+        logs_b = await db_client.fetch("SELECT * FROM audit_logs WHERE tenant_id = $1", tenant_b)
         assert len(logs_b) == 3
 
         # Cleanup
@@ -503,8 +476,8 @@ class TestAuditLogPersistence:
         # Query with tenant + action filter (should use index)
         start_time = time.time()
         logs = await db_client.fetch(
-            """SELECT * FROM audit_logs 
-               WHERE tenant_id = $1 AND action = $2 
+            """SELECT * FROM audit_logs
+               WHERE tenant_id = $1 AND action = $2
                ORDER BY created_at DESC LIMIT 50""",
             tenant_id,
             "session.created",
@@ -515,9 +488,7 @@ class TestAuditLogPersistence:
         assert query_latency_ms < 100, f"Query latency {query_latency_ms}ms exceeds 100ms"
 
         # Cleanup
-        await db_client.execute(
-            "DELETE FROM audit_logs WHERE tenant_id = $1", tenant_id
-        )
+        await db_client.execute("DELETE FROM audit_logs WHERE tenant_id = $1", tenant_id)
 
 
 class TestDatabaseTransactions:
@@ -564,9 +535,7 @@ class TestDatabaseTransactions:
         assert items[0].content["text"] == "Initial"
 
         # Cleanup
-        await db_client.execute(
-            "DELETE FROM conversation_items WHERE session_id = $1", session_id
-        )
+        await db_client.execute("DELETE FROM conversation_items WHERE session_id = $1", session_id)
 
 
 if __name__ == "__main__":

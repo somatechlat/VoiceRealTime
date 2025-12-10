@@ -7,12 +7,13 @@ Provides endpoints for:
 
 Requirements: 21.8
 """
+
 from __future__ import annotations
 
 import logging
 import secrets
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field, HttpUrl
@@ -25,7 +26,7 @@ router = APIRouter()
 
 class OrganizationProfile(BaseModel):
     """Organization profile settings."""
-    
+
     name: str = Field(description="Organization name")
     email: EmailStr = Field(description="Primary contact email")
     website: Optional[str] = Field(default=None, description="Website URL")
@@ -37,7 +38,7 @@ class OrganizationProfile(BaseModel):
 
 class NotificationPreferences(BaseModel):
     """Notification preferences."""
-    
+
     email_billing: bool = Field(default=True, description="Billing notifications")
     email_usage_alerts: bool = Field(default=True, description="Usage threshold alerts")
     email_security: bool = Field(default=True, description="Security notifications")
@@ -47,7 +48,7 @@ class NotificationPreferences(BaseModel):
 
 class WebhookConfig(BaseModel):
     """Webhook configuration."""
-    
+
     id: str = Field(description="Webhook ID")
     url: str = Field(description="Webhook URL")
     events: List[str] = Field(description="Subscribed events")
@@ -59,7 +60,7 @@ class WebhookConfig(BaseModel):
 
 class WebhookCreate(BaseModel):
     """Request to create a webhook."""
-    
+
     url: HttpUrl = Field(description="Webhook URL")
     events: List[str] = Field(
         description="Events to subscribe to",
@@ -69,7 +70,7 @@ class WebhookCreate(BaseModel):
 
 class WebhookUpdate(BaseModel):
     """Request to update a webhook."""
-    
+
     url: Optional[HttpUrl] = Field(default=None, description="New URL")
     events: Optional[List[str]] = Field(default=None, description="New events")
     is_active: Optional[bool] = Field(default=None, description="Active status")
@@ -99,10 +100,10 @@ async def get_profile(
     """Get organization profile."""
     try:
         from ....app.services.lago_service import get_lago_service
-        
+
         lago = get_lago_service()
         customer = await lago.get_customer(user.tenant_id)
-        
+
         if customer:
             return OrganizationProfile(
                 name=customer.name,
@@ -113,13 +114,13 @@ async def get_profile(
                 timezone=customer.timezone,
                 logo_url=None,
             )
-        
+
         return OrganizationProfile(
             name="Unknown",
             email=user.email,
             timezone="UTC",
         )
-        
+
     except Exception as e:
         logger.error(f"Failed to get profile: {e}")
         raise HTTPException(
@@ -134,14 +135,14 @@ async def update_profile(
     user: UserContext = Depends(require_admin()),
 ) -> OrganizationProfile:
     """Update organization profile.
-    
+
     Requires tenant_admin role.
     """
     try:
         from ....app.services.lago_service import get_lago_service
-        
+
         lago = get_lago_service()
-        
+
         # Update Lago customer
         await lago.update_customer(
             external_id=user.tenant_id,
@@ -149,9 +150,9 @@ async def update_profile(
             email=profile.email,
             timezone=profile.timezone,
         )
-        
+
         return profile
-        
+
     except Exception as e:
         logger.error(f"Failed to update profile: {e}")
         raise HTTPException(
@@ -196,13 +197,15 @@ async def list_webhooks(
     return []
 
 
-@router.post("/settings/webhooks", response_model=WebhookConfig, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/settings/webhooks", response_model=WebhookConfig, status_code=status.HTTP_201_CREATED
+)
 async def create_webhook(
     request: WebhookCreate,
     user: UserContext = Depends(require_admin()),
 ) -> WebhookConfig:
     """Create a new webhook.
-    
+
     Requires tenant_admin role.
     The signing secret is only returned once.
     """
@@ -213,13 +216,13 @@ async def create_webhook(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid events: {invalid_events}",
         )
-    
+
     # Generate webhook ID and secret
     webhook_id = f"wh_{secrets.token_hex(8)}"
     webhook_secret = f"whsec_{secrets.token_hex(32)}"
-    
+
     # In production, save to database
-    
+
     return WebhookConfig(
         id=webhook_id,
         url=str(request.url),
@@ -251,7 +254,7 @@ async def update_webhook(
     user: UserContext = Depends(require_admin()),
 ) -> WebhookConfig:
     """Update a webhook.
-    
+
     Requires tenant_admin role.
     """
     # In production, update in database
@@ -261,13 +264,15 @@ async def update_webhook(
     )
 
 
-@router.delete("/settings/webhooks/{webhook_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+@router.delete(
+    "/settings/webhooks/{webhook_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None
+)
 async def delete_webhook(
     webhook_id: str,
     user: UserContext = Depends(require_admin()),
 ):
     """Delete a webhook.
-    
+
     Requires tenant_admin role.
     """
     # In production, delete from database
@@ -283,7 +288,7 @@ async def test_webhook(
     user: UserContext = Depends(require_admin()),
 ) -> dict:
     """Send a test event to a webhook.
-    
+
     Requires tenant_admin role.
     """
     # In production, send test event
@@ -299,13 +304,13 @@ async def rotate_webhook_secret(
     user: UserContext = Depends(require_admin()),
 ) -> WebhookConfig:
     """Rotate webhook signing secret.
-    
+
     Requires tenant_admin role.
     The new secret is only returned once.
     """
     # Generate new secret
-    new_secret = f"whsec_{secrets.token_hex(32)}"
-    
+    f"whsec_{secrets.token_hex(32)}"
+
     # In production, update in database
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,

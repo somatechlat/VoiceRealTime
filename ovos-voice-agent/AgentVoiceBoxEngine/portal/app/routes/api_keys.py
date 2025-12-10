@@ -9,17 +9,17 @@ Provides endpoints for:
 
 Requirements: 21.4
 """
+
 from __future__ import annotations
 
 import logging
-import secrets
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from ..auth import UserContext, get_current_user, require_permission
+from ..auth import UserContext, get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -27,7 +27,7 @@ router = APIRouter()
 
 class APIKeyCreate(BaseModel):
     """Request to create a new API key."""
-    
+
     name: str = Field(min_length=1, max_length=100, description="Key name")
     scopes: List[str] = Field(
         default=["realtime:connect"],
@@ -43,7 +43,7 @@ class APIKeyCreate(BaseModel):
 
 class APIKeyResponse(BaseModel):
     """API key response (without secret)."""
-    
+
     id: str = Field(description="Key ID")
     name: str = Field(description="Key name")
     prefix: str = Field(description="Key prefix (first 8 chars)")
@@ -56,13 +56,13 @@ class APIKeyResponse(BaseModel):
 
 class APIKeyCreated(APIKeyResponse):
     """API key response with secret (only returned on creation)."""
-    
+
     secret: str = Field(description="Full API key (only shown once)")
 
 
 class APIKeyUsage(BaseModel):
     """API key usage statistics."""
-    
+
     key_id: str
     total_requests: int
     requests_today: int
@@ -72,7 +72,7 @@ class APIKeyUsage(BaseModel):
 
 class APIKeyRotateResponse(BaseModel):
     """Response from key rotation."""
-    
+
     old_key_id: str
     new_key: APIKeyCreated
     grace_period_hours: int = Field(
@@ -89,13 +89,13 @@ async def list_api_keys(
     """List all API keys for the tenant."""
     try:
         from ....app.services.api_key_service import get_api_key_service
-        
+
         service = get_api_key_service()
         keys = await service.list_keys(
             tenant_id=user.tenant_id,
             include_inactive=include_inactive,
         )
-        
+
         return [
             APIKeyResponse(
                 id=k.id,
@@ -109,7 +109,7 @@ async def list_api_keys(
             )
             for k in keys
         ]
-        
+
     except Exception as e:
         logger.error(f"Failed to list API keys: {e}")
         raise HTTPException(
@@ -124,14 +124,14 @@ async def create_api_key(
     user: UserContext = Depends(get_current_user),
 ) -> APIKeyCreated:
     """Create a new API key.
-    
+
     The full key secret is only returned once. Store it securely.
     """
     try:
         from ....app.services.api_key_service import get_api_key_service
-        
+
         service = get_api_key_service()
-        
+
         # Generate the key
         key, secret = await service.create_key(
             tenant_id=user.tenant_id,
@@ -140,7 +140,7 @@ async def create_api_key(
             expires_in_days=request.expires_in_days,
             created_by=user.user_id,
         )
-        
+
         return APIKeyCreated(
             id=key.id,
             name=key.name,
@@ -152,7 +152,7 @@ async def create_api_key(
             is_active=key.is_active,
             secret=secret,
         )
-        
+
     except Exception as e:
         logger.error(f"Failed to create API key: {e}")
         raise HTTPException(
@@ -169,16 +169,16 @@ async def get_api_key(
     """Get API key details."""
     try:
         from ....app.services.api_key_service import get_api_key_service
-        
+
         service = get_api_key_service()
         key = await service.get_key(key_id=key_id, tenant_id=user.tenant_id)
-        
+
         if not key:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="API key not found",
             )
-        
+
         return APIKeyResponse(
             id=key.id,
             name=key.name,
@@ -189,7 +189,7 @@ async def get_api_key(
             last_used_at=key.last_used_at,
             is_active=key.is_active,
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -208,16 +208,16 @@ async def revoke_api_key(
     """Revoke an API key."""
     try:
         from ....app.services.api_key_service import get_api_key_service
-        
+
         service = get_api_key_service()
         success = await service.revoke_key(key_id=key_id, tenant_id=user.tenant_id)
-        
+
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="API key not found",
             )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -234,15 +234,15 @@ async def rotate_api_key(
     user: UserContext = Depends(get_current_user),
 ) -> APIKeyRotateResponse:
     """Rotate an API key.
-    
+
     Creates a new key and schedules the old key for revocation
     after a 24-hour grace period.
     """
     try:
         from ....app.services.api_key_service import get_api_key_service
-        
+
         service = get_api_key_service()
-        
+
         # Get existing key
         old_key = await service.get_key(key_id=key_id, tenant_id=user.tenant_id)
         if not old_key:
@@ -250,7 +250,7 @@ async def rotate_api_key(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="API key not found",
             )
-        
+
         # Create new key with same settings
         new_key, secret = await service.create_key(
             tenant_id=user.tenant_id,
@@ -259,10 +259,10 @@ async def rotate_api_key(
             expires_in_days=None,  # New key doesn't expire
             created_by=user.user_id,
         )
-        
+
         # Schedule old key for revocation (24 hours)
         await service.schedule_revocation(key_id=key_id, hours=24)
-        
+
         return APIKeyRotateResponse(
             old_key_id=key_id,
             new_key=APIKeyCreated(
@@ -278,7 +278,7 @@ async def rotate_api_key(
             ),
             grace_period_hours=24,
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -297,9 +297,9 @@ async def get_api_key_usage(
     """Get usage statistics for an API key."""
     try:
         from ....app.services.api_key_service import get_api_key_service
-        
+
         service = get_api_key_service()
-        
+
         # Verify key belongs to tenant
         key = await service.get_key(key_id=key_id, tenant_id=user.tenant_id)
         if not key:
@@ -307,9 +307,9 @@ async def get_api_key_usage(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="API key not found",
             )
-        
+
         usage = await service.get_key_usage(key_id=key_id)
-        
+
         return APIKeyUsage(
             key_id=key_id,
             total_requests=usage.get("total_requests", 0),
@@ -317,7 +317,7 @@ async def get_api_key_usage(
             requests_this_month=usage.get("requests_this_month", 0),
             last_used_at=key.last_used_at,
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:

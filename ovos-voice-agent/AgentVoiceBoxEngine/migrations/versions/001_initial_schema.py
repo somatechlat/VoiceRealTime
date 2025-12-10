@@ -1,7 +1,7 @@
 """Initial schema with multi-tenant support.
 
 Revision ID: 001_initial
-Revises: 
+Revises:
 Create Date: 2024-12-08
 
 Tables:
@@ -12,10 +12,11 @@ Tables:
 - conversation_items: Conversation history
 - audit_logs: Administrative action tracking
 """
+
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "001_initial"
@@ -35,12 +36,28 @@ def upgrade() -> None:
         "tenants",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column("name", sa.String(255), nullable=False),
-        sa.Column("tier", postgresql.ENUM("free", "pro", "enterprise", name="tenanttier", create_type=False), nullable=False, server_default="free"),
-        sa.Column("status", postgresql.ENUM("active", "suspended", "deleted", name="tenantstatus", create_type=False), nullable=False, server_default="active"),
+        sa.Column(
+            "tier",
+            postgresql.ENUM("free", "pro", "enterprise", name="tenanttier", create_type=False),
+            nullable=False,
+            server_default="free",
+        ),
+        sa.Column(
+            "status",
+            postgresql.ENUM(
+                "active", "suspended", "deleted", name="tenantstatus", create_type=False
+            ),
+            nullable=False,
+            server_default="active",
+        ),
         sa.Column("billing_id", sa.String(255), nullable=True),
         sa.Column("settings", postgresql.JSONB, nullable=False, server_default="{}"),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
     )
     op.create_index("ix_tenants_billing_id", "tenants", ["billing_id"])
     op.create_index("ix_tenants_status", "tenants", ["status"])
@@ -49,11 +66,25 @@ def upgrade() -> None:
     op.create_table(
         "projects",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("tenant_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "tenant_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("tenants.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("name", sa.String(255), nullable=False),
-        sa.Column("environment", postgresql.ENUM("production", "staging", "development", name="projectenvironment", create_type=False), nullable=False, server_default="development"),
+        sa.Column(
+            "environment",
+            postgresql.ENUM(
+                "production", "staging", "development", name="projectenvironment", create_type=False
+            ),
+            nullable=False,
+            server_default="development",
+        ),
         sa.Column("settings", postgresql.JSONB, nullable=False, server_default="{}"),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
     )
     op.create_index("ix_projects_tenant_id", "projects", ["tenant_id"])
 
@@ -61,7 +92,12 @@ def upgrade() -> None:
     op.create_table(
         "api_keys",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("project_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("projects.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "project_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("projects.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("key_hash", sa.String(255), nullable=False),
         sa.Column("key_prefix", sa.String(16), nullable=False),
         sa.Column("name", sa.String(255), nullable=False),
@@ -70,7 +106,9 @@ def upgrade() -> None:
         sa.Column("is_active", sa.Boolean, nullable=False, server_default="true"),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("last_used_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
     )
     op.create_index("ix_api_keys_project_id", "api_keys", ["project_id"])
     op.create_index("ix_api_keys_key_prefix", "api_keys", ["key_prefix"])
@@ -93,7 +131,9 @@ def upgrade() -> None:
         sa.Column("audio_config", postgresql.JSONB, nullable=True),
         sa.Column("max_output_tokens", sa.String(32), nullable=True),
         sa.Column("expires_at", sa.DateTime(timezone=False), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=False), nullable=False, server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=False), nullable=False, server_default=sa.func.now()
+        ),
         sa.Column("closed_at", sa.DateTime(timezone=False), nullable=True),
     )
     op.create_index("ix_sessions_tenant_id", "sessions", ["tenant_id"])
@@ -108,7 +148,9 @@ def upgrade() -> None:
         sa.Column("tenant_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("role", sa.String(32), nullable=False),
         sa.Column("content", postgresql.JSONB, nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=False), nullable=False, server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=False), nullable=False, server_default=sa.func.now()
+        ),
     )
     op.create_index("ix_conversation_items_tenant_id", "conversation_items", ["tenant_id"])
     op.create_index("ix_conversation_items_session_id", "conversation_items", ["session_id"])
@@ -127,7 +169,9 @@ def upgrade() -> None:
         sa.Column("details", postgresql.JSONB, nullable=False, server_default="{}"),
         sa.Column("ip_address", sa.String(45), nullable=True),
         sa.Column("user_agent", sa.Text, nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
     )
     op.create_index("ix_audit_logs_tenant_id", "audit_logs", ["tenant_id"])
     op.create_index("ix_audit_logs_tenant_action", "audit_logs", ["tenant_id", "action"])
@@ -141,7 +185,7 @@ def downgrade() -> None:
     op.drop_table("api_keys")
     op.drop_table("projects")
     op.drop_table("tenants")
-    
+
     # Drop enum types
     op.execute("DROP TYPE IF EXISTS projectenvironment")
     op.execute("DROP TYPE IF EXISTS tenantstatus")

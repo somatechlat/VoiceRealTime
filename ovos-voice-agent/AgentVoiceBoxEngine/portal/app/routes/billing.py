@@ -9,6 +9,7 @@ Provides endpoints for:
 
 Requirements: 21.6, 21.7
 """
+
 from __future__ import annotations
 
 import logging
@@ -27,7 +28,7 @@ router = APIRouter()
 
 class PlanDetails(BaseModel):
     """Subscription plan details."""
-    
+
     code: str = Field(description="Plan code")
     name: str = Field(description="Plan display name")
     description: str = Field(description="Plan description")
@@ -40,7 +41,7 @@ class PlanDetails(BaseModel):
 
 class CurrentSubscription(BaseModel):
     """Current subscription details."""
-    
+
     id: str = Field(description="Subscription ID")
     plan: PlanDetails = Field(description="Current plan details")
     status: str = Field(description="Subscription status")
@@ -51,7 +52,7 @@ class CurrentSubscription(BaseModel):
 
 class InvoiceItem(BaseModel):
     """Invoice line item."""
-    
+
     description: str
     quantity: float
     unit_amount_cents: int
@@ -60,7 +61,7 @@ class InvoiceItem(BaseModel):
 
 class Invoice(BaseModel):
     """Invoice details."""
-    
+
     id: str = Field(description="Invoice ID")
     number: str = Field(description="Invoice number")
     status: str = Field(description="Invoice status")
@@ -75,13 +76,13 @@ class Invoice(BaseModel):
 
 class SubscriptionChange(BaseModel):
     """Request to change subscription."""
-    
+
     plan_code: str = Field(description="New plan code")
 
 
 class SubscriptionChangeResponse(BaseModel):
     """Response from subscription change."""
-    
+
     subscription: CurrentSubscription
     effective_date: datetime = Field(description="When change takes effect")
     proration_amount_cents: int = Field(description="Proration amount")
@@ -165,12 +166,12 @@ async def get_subscription(
     """Get current subscription details."""
     try:
         from ....app.services.lago_service import get_lago_service
-        
+
         lago = get_lago_service()
         subscriptions = await lago.list_subscriptions(
             external_customer_id=user.tenant_id,
         )
-        
+
         if not subscriptions:
             # Return free plan if no subscription
             return CurrentSubscription(
@@ -181,13 +182,13 @@ async def get_subscription(
                 current_period_end=None,
                 cancel_at_period_end=False,
             )
-        
+
         sub = subscriptions[0]
         plan = next(
             (p for p in AVAILABLE_PLANS if p.code == sub.plan_code),
             AVAILABLE_PLANS[0],
         )
-        
+
         return CurrentSubscription(
             id=sub.external_id,
             plan=plan,
@@ -196,7 +197,7 @@ async def get_subscription(
             current_period_end=sub.ending_at,
             cancel_at_period_end=sub.canceled_at is not None,
         )
-        
+
     except Exception as e:
         logger.error(f"Failed to get subscription: {e}")
         raise HTTPException(
@@ -211,14 +212,14 @@ async def change_subscription(
     user: UserContext = Depends(require_admin()),
 ) -> SubscriptionChangeResponse:
     """Upgrade or downgrade subscription.
-    
+
     Requires tenant_admin role.
     """
     try:
         from ....app.services.lago_service import get_lago_service
-        
+
         lago = get_lago_service()
-        
+
         # Validate plan code
         plan = next(
             (p for p in AVAILABLE_PLANS if p.code == request.plan_code),
@@ -229,12 +230,12 @@ async def change_subscription(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid plan code: {request.plan_code}",
             )
-        
+
         # Get current subscription
         subscriptions = await lago.list_subscriptions(
             external_customer_id=user.tenant_id,
         )
-        
+
         if subscriptions:
             # Update existing subscription
             sub = await lago.update_subscription(
@@ -247,7 +248,7 @@ async def change_subscription(
                 external_customer_id=user.tenant_id,
                 plan_code=request.plan_code,
             )
-        
+
         return SubscriptionChangeResponse(
             subscription=CurrentSubscription(
                 id=sub.external_id,
@@ -261,7 +262,7 @@ async def change_subscription(
             proration_amount_cents=0,  # Would be calculated by Lago
             message=f"Subscription changed to {plan.name}",
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -277,31 +278,31 @@ async def cancel_subscription(
     user: UserContext = Depends(require_admin()),
 ) -> dict:
     """Cancel subscription at end of current period.
-    
+
     Requires tenant_admin role.
     """
     try:
         from ....app.services.lago_service import get_lago_service
-        
+
         lago = get_lago_service()
         subscriptions = await lago.list_subscriptions(
             external_customer_id=user.tenant_id,
         )
-        
+
         if not subscriptions:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="No active subscription found",
             )
-        
+
         # Terminate subscription
         await lago.terminate_subscription(subscriptions[0].external_id)
-        
+
         return {
             "message": "Subscription will be canceled at end of current period",
             "effective_date": subscriptions[0].ending_at,
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -321,14 +322,14 @@ async def list_invoices(
     """List invoices for the tenant."""
     try:
         from ....app.services.lago_service import get_lago_service
-        
+
         lago = get_lago_service()
         invoices = await lago.list_invoices(
             external_customer_id=user.tenant_id,
             page=page,
             per_page=per_page,
         )
-        
+
         return [
             Invoice(
                 id=inv.lago_id,
@@ -344,7 +345,7 @@ async def list_invoices(
             )
             for inv in invoices
         ]
-        
+
     except Exception as e:
         logger.error(f"Failed to list invoices: {e}")
         raise HTTPException(
@@ -361,16 +362,16 @@ async def get_invoice(
     """Get invoice details."""
     try:
         from ....app.services.lago_service import get_lago_service
-        
+
         lago = get_lago_service()
         inv = await lago.get_invoice(invoice_id)
-        
+
         if not inv:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Invoice not found",
             )
-        
+
         return Invoice(
             id=inv.lago_id,
             number=inv.number,
@@ -383,7 +384,7 @@ async def get_invoice(
             items=[],
             pdf_url=inv.file_url,
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -402,18 +403,18 @@ async def download_invoice(
     """Download invoice as PDF."""
     try:
         from ....app.services.lago_service import get_lago_service
-        
+
         lago = get_lago_service()
         pdf_url = await lago.download_invoice(invoice_id)
-        
+
         if not pdf_url:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Invoice PDF not available",
             )
-        
+
         return RedirectResponse(url=pdf_url)
-        
+
     except HTTPException:
         raise
     except Exception as e:

@@ -2,24 +2,13 @@
 
 This module provides configuration classes that workers can import
 without triggering Flask imports from app/__init__.py.
+
+Re-exports RedisSettings from app.config to avoid duplicate class definitions.
 """
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
-from pydantic.config import ConfigDict
-
-
-class RedisSettings(BaseModel):
-    """Redis connection settings."""
-    model_config = ConfigDict(extra="forbid")
-
-    url: str = Field("redis://localhost:6379/0", description="Redis connection URL")
-    max_connections: int = Field(200, description="Maximum connections in pool")
-    socket_timeout: float = Field(5.0, description="Socket timeout in seconds")
-    socket_connect_timeout: float = Field(5.0, description="Connection timeout in seconds")
-    retry_on_timeout: bool = Field(True, description="Retry on timeout")
-    health_check_interval: int = Field(30, description="Health check interval in seconds")
-
+# Re-export RedisSettings from the canonical location to avoid type conflicts
+from ..config import RedisSettings
 
 __all__ = ["RedisSettings"]

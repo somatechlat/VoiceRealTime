@@ -4,9 +4,9 @@ Implements Requirements 15.3, 14.4:
 - Redact or hash sensitive fields in logs
 - Protect transcripts, user identifiers, API keys
 """
+
 from __future__ import annotations
 
-import hashlib
 import logging
 import re
 from typing import Any, Dict, Optional, Set
@@ -31,9 +31,19 @@ class PIIRedactor:
 
     MASK = "[REDACTED]"
     SENSITIVE_FIELDS: Set[str] = {
-        "password", "secret", "token", "api_key", "apikey",
-        "bearer", "authorization", "credit_card", "ssn",
-        "transcript", "content", "audio", "audio_data",
+        "password",
+        "secret",
+        "token",
+        "api_key",
+        "apikey",
+        "bearer",
+        "authorization",
+        "credit_card",
+        "ssn",
+        "transcript",
+        "content",
+        "audio",
+        "audio_data",
     }
     PARTIAL_FIELDS: Set[str] = {"email", "phone", "ip_address"}
 

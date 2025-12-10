@@ -47,6 +47,7 @@ CHANNEL_AUDIO_OUT = "audio:out"
 @dataclass
 class StreamMessage:
     """A message from a Redis Stream."""
+
     message_id: str
     stream_name: str
     data: Dict[str, Any]
@@ -56,6 +57,7 @@ class StreamMessage:
 @dataclass
 class AudioSTTRequest:
     """Request to transcribe audio."""
+
     session_id: str
     tenant_id: str
     audio_b64: str  # Base64 encoded audio
@@ -76,6 +78,7 @@ class AudioSTTRequest:
 @dataclass
 class TTSRequest:
     """Request to synthesize text to speech."""
+
     session_id: str
     tenant_id: str
     text: str
@@ -102,6 +105,7 @@ class TTSRequest:
 @dataclass
 class TranscriptionResult:
     """Result from STT worker."""
+
     session_id: str
     text: str
     language: str
@@ -121,7 +125,7 @@ class TranscriptionResult:
 
 class RedisStreamsClient:
     """Client for Redis Streams-based worker communication.
-    
+
     Provides:
     - Publishing audio to STT workers
     - Publishing text to TTS workers
@@ -137,7 +141,7 @@ class RedisStreamsClient:
         """Ensure stream and consumer group exist."""
         if stream_name in self._initialized_streams:
             return
-        
+
         client = self._redis.client
         try:
             # Create consumer group (creates stream if not exists)
@@ -152,62 +156,62 @@ class RedisStreamsClient:
             # Group may already exist
             if "BUSYGROUP" not in str(e):
                 logger.warning(f"Error creating stream group: {e}")
-        
+
         self._initialized_streams.add(stream_name)
 
     async def publish_audio_for_stt(self, request: AudioSTTRequest) -> str:
         """Publish audio to STT worker stream.
-        
+
         Args:
             request: Audio transcription request
-            
+
         Returns:
             Message ID from Redis
         """
         await self._ensure_stream_exists(STREAM_AUDIO_STT, GROUP_STT_WORKERS)
-        
+
         client = self._redis.client
         message_id = await client.xadd(
             STREAM_AUDIO_STT,
             request.to_dict(),
             maxlen=10000,  # Keep last 10K messages
         )
-        
+
         logger.debug(
             "Published audio for STT",
             extra={
                 "session_id": request.session_id,
                 "message_id": message_id,
                 "correlation_id": request.correlation_id,
-            }
+            },
         )
         return message_id
 
     async def publish_tts_request(self, request: TTSRequest) -> str:
         """Publish text to TTS worker stream.
-        
+
         Args:
             request: TTS synthesis request
-            
+
         Returns:
             Message ID from Redis
         """
         await self._ensure_stream_exists(STREAM_TTS_REQUESTS, GROUP_TTS_WORKERS)
-        
+
         client = self._redis.client
         message_id = await client.xadd(
             STREAM_TTS_REQUESTS,
             request.to_dict(),
             maxlen=10000,
         )
-        
+
         logger.debug(
             "Published TTS request",
             extra={
                 "session_id": request.session_id,
                 "message_id": message_id,
                 "text_length": len(request.text),
-            }
+            },
         )
         return message_id
 
@@ -220,22 +224,22 @@ class RedisStreamsClient:
         is_final: bool = False,
     ) -> str:
         """Publish audio chunk to session's output stream.
-        
+
         Used by TTS workers to stream audio back to gateway.
-        
+
         Args:
             session_id: Target session
             chunk_b64: Base64 encoded audio chunk
             sequence: Chunk sequence number for ordering
             sample_rate: Audio sample rate
             is_final: Whether this is the last chunk
-            
+
         Returns:
             Message ID from Redis
         """
         stream_name = f"{CHANNEL_AUDIO_OUT}:{session_id}"
         client = self._redis.client
-        
+
         message_id = await client.xadd(
             stream_name,
             {
@@ -258,30 +262,32 @@ class RedisStreamsClient:
         correlation_id: str = "",
     ) -> int:
         """Publish transcription result via pub/sub.
-        
+
         Used by STT workers to send results back to gateway.
-        
+
         Args:
             session_id: Target session
             text: Transcribed text
             language: Detected language
             confidence: Confidence score
             correlation_id: Request correlation ID
-            
+
         Returns:
             Number of subscribers that received the message
         """
         channel = f"{CHANNEL_TRANSCRIPTION}:{session_id}"
-        message = json.dumps({
-            "type": "transcription.completed",
-            "session_id": session_id,
-            "text": text,
-            "language": language,
-            "confidence": confidence,
-            "correlation_id": correlation_id,
-            "timestamp": time.time(),
-        })
-        
+        message = json.dumps(
+            {
+                "type": "transcription.completed",
+                "session_id": session_id,
+                "text": text,
+                "language": language,
+                "confidence": confidence,
+                "correlation_id": correlation_id,
+                "timestamp": time.time(),
+            }
+        )
+
         return await self._redis.publish(channel, message)
 
     async def subscribe_to_transcriptions(
@@ -289,16 +295,16 @@ class RedisStreamsClient:
         session_id: str,
     ) -> AsyncIterator[TranscriptionResult]:
         """Subscribe to transcription results for a session.
-        
+
         Args:
             session_id: Session to subscribe to
-            
+
         Yields:
             TranscriptionResult objects as they arrive
         """
         channel = f"{CHANNEL_TRANSCRIPTION}:{session_id}"
         pubsub = await self._redis.subscribe(channel)
-        
+
         async for message in pubsub.listen():
             if message["type"] == "message":
                 try:
@@ -315,73 +321,77 @@ class RedisStreamsClient:
         block_ms: int = 1000,
     ) -> List[Dict[str, Any]]:
         """Read audio chunks from session's output stream.
-        
+
         Used by gateway to receive TTS audio chunks.
-        
+
         Args:
             session_id: Session to read from
             last_id: Last message ID received (for continuation)
             count: Maximum messages to read
             block_ms: Block timeout in milliseconds
-            
+
         Returns:
             List of audio chunk dictionaries
         """
         stream_name = f"{CHANNEL_AUDIO_OUT}:{session_id}"
         client = self._redis.client
-        
+
         try:
             result = await client.xread(
                 {stream_name: last_id},
                 count=count,
                 block=block_ms,
             )
-            
+
             if not result:
                 return []
-            
+
             chunks = []
             for stream, messages in result:
                 for msg_id, data in messages:
-                    chunks.append({
-                        "message_id": msg_id,
-                        "chunk": data.get("chunk", ""),
-                        "sequence": int(data.get("sequence", 0)),
-                        "sample_rate": int(data.get("sample_rate", 24000)),
-                        "is_final": data.get("is_final") == "1",
-                    })
+                    chunks.append(
+                        {
+                            "message_id": msg_id,
+                            "chunk": data.get("chunk", ""),
+                            "sequence": int(data.get("sequence", 0)),
+                            "sample_rate": int(data.get("sample_rate", 24000)),
+                            "is_final": data.get("is_final") == "1",
+                        }
+                    )
             return chunks
-            
+
         except Exception as e:
             logger.warning(f"Error reading audio chunks: {e}")
             return []
 
     async def cancel_tts(self, session_id: str) -> int:
         """Signal TTS cancellation for a session.
-        
+
         Args:
             session_id: Session to cancel
-            
+
         Returns:
             Number of subscribers notified
         """
         channel = f"{CHANNEL_TTS}:{session_id}"
-        message = json.dumps({
-            "type": "tts.cancel",
-            "session_id": session_id,
-            "timestamp": time.time(),
-        })
+        message = json.dumps(
+            {
+                "type": "tts.cancel",
+                "session_id": session_id,
+                "timestamp": time.time(),
+            }
+        )
         return await self._redis.publish(channel, message)
 
     async def cleanup_session_streams(self, session_id: str) -> None:
         """Clean up streams for a closed session.
-        
+
         Args:
             session_id: Session to clean up
         """
         stream_name = f"{CHANNEL_AUDIO_OUT}:{session_id}"
         client = self._redis.client
-        
+
         try:
             await client.delete(stream_name)
             logger.debug(f"Cleaned up stream {stream_name}")

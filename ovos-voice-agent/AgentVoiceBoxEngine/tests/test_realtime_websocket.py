@@ -131,7 +131,9 @@ def test_websocket_conversation_and_response_flow(app):
     assert events[0]["type"] == "session.created"
     assert events[1]["type"] == "rate_limits.updated"
 
-    conversation_events = [event for event in events if event["type"] == "conversation.item.created"]
+    conversation_events = [
+        event for event in events if event["type"] == "conversation.item.created"
+    ]
     assert conversation_events, "Conversation events were not emitted"
     user_item = conversation_events[0]["item"]
     assert user_item["role"] == "user"
@@ -142,7 +144,9 @@ def test_websocket_conversation_and_response_flow(app):
     assert "response.audio.delta" in response_types
     assert "response.done" in response_types
 
-    assistant_items = [event for event in conversation_events if event["item"]["role"] == "assistant"]
+    assistant_items = [
+        event for event in conversation_events if event["item"]["role"] == "assistant"
+    ]
     assert assistant_items
     assert "I heard you say" in assistant_items[0]["item"]["content"][0].get("text", "")
 

@@ -6,18 +6,18 @@ This implementation plan builds the dual-portal SaaS system incrementally, with 
 
 ---
 
-- [ ] 1. Project Setup & Core Infrastructure
-  - [ ] 1.1 Initialize Next.js 14 project with App Router and TypeScript
+- [x] 1. Project Setup & Core Infrastructure
+  - [x] 1.1 Initialize Next.js 14 project with App Router and TypeScript
     - Configure tsconfig.json with strict mode
     - Set up path aliases (@/components, @/services, @/lib)
     - Install dependencies: tailwindcss, lucide-react, swr, zod
     - _Requirements: 1.7_
-  - [ ] 1.2 Set up testing infrastructure
+  - [x] 1.2 Set up testing infrastructure
     - Install vitest, @testing-library/react, fast-check
     - Configure vitest.config.ts with jsdom environment
     - Create test utilities and setup files
     - _Requirements: Testing Strategy_
-  - [ ] 1.3 Create base folder structure
+  - [x] 1.3 Create base folder structure
     - Set up src/app/(auth), (customer), (admin) route groups
     - Create src/components/ui, src/services, src/lib directories
     - Create src/__tests__/unit and src/__tests__/properties directories
@@ -25,29 +25,29 @@ This implementation plan builds the dual-portal SaaS system incrementally, with 
 
 ---
 
-- [ ] 2. Theme System Implementation
-  - [ ] 2.1 Implement ThemeContext with light/dark/system modes
+- [x] 2. Theme System Implementation
+  - [x] 2.1 Implement ThemeContext with light/dark/system modes
     - Create ThemeProvider with localStorage persistence
     - Implement OS preference detection via matchMedia
     - Apply theme class to document element
     - _Requirements: 5.1, 5.2, 5.7_
-  - [ ] 2.2 Write property test for theme persistence
+  - [x] 2.2 Write property test for theme persistence
     - **Property 8: Theme Persistence**
     - **Validates: Requirements 5.2**
-  - [ ] 2.3 Write property test for system theme detection
+  - [x] 2.3 Write property test for system theme detection
     - **Property 9: System Theme Detection**
     - **Validates: Requirements 5.7**
-  - [ ] 2.4 Implement CSS custom properties for both themes
+  - [x] 2.4 Implement CSS custom properties for both themes
     - Define dark theme variables (background #0a0a0f, card #111118, etc.)
     - Define light theme variables (background #f5f7f5, card #ffffff, etc.)
     - Add Verve-style accent colors for light theme
     - _Requirements: 5.3, 5.4, 5.5_
-  - [ ] 2.5 Create ThemeToggle component
+  - [x] 2.5 Create ThemeToggle component
     - Implement dropdown variant with Light/Dark/System options
     - Implement compact sun/moon button variant
     - Ensure keyboard accessibility and ARIA labels
     - _Requirements: 5.8_
-  - [ ] 2.6 Write property test for WCAG contrast compliance
+  - [x] 2.6 Write property test for WCAG contrast compliance
     - **Property 10: WCAG Contrast Compliance**
     - **Validates: Requirements 5.6, 18.6**
 

@@ -8,6 +8,7 @@ Implements Requirements 3.5, 3.6:
 
 Token Format: eph_{random} (24 chars)
 """
+
 from __future__ import annotations
 
 import datetime as dt

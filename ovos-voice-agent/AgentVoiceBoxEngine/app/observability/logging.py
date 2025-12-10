@@ -5,10 +5,10 @@ Implements Requirement 14.4:
 - Fields: timestamp, level, service, tenant_id, session_id, correlation_id, message
 - PII redaction integration
 """
+
 from __future__ import annotations
 
 import logging
-import sys
 import uuid
 from contextvars import ContextVar
 from datetime import datetime, timezone
@@ -17,6 +17,7 @@ from typing import Any, Dict, Optional
 
 try:
     from pythonjsonlogger import jsonlogger
+
     JSON_LOGGER_AVAILABLE = True
 except ImportError:
     jsonlogger = None
@@ -92,7 +93,7 @@ class ContextFilter(logging.Filter):
 
 class StructuredJsonFormatter(logging.Formatter):
     """JSON formatter with structured fields.
-    
+
     Output format:
     {
         "timestamp": "2024-01-15T10:30:00.000Z",
@@ -139,12 +140,32 @@ class StructuredJsonFormatter(logging.Formatter):
         extra_fields = {}
         for key, value in record.__dict__.items():
             if key not in (
-                "name", "msg", "args", "created", "filename", "funcName",
-                "levelname", "levelno", "lineno", "module", "msecs",
-                "pathname", "process", "processName", "relativeCreated",
-                "stack_info", "exc_info", "exc_text", "thread", "threadName",
-                "message", "service", "correlation_id", "tenant_id",
-                "session_id", "request_id",
+                "name",
+                "msg",
+                "args",
+                "created",
+                "filename",
+                "funcName",
+                "levelname",
+                "levelno",
+                "lineno",
+                "module",
+                "msecs",
+                "pathname",
+                "process",
+                "processName",
+                "relativeCreated",
+                "stack_info",
+                "exc_info",
+                "exc_text",
+                "thread",
+                "threadName",
+                "message",
+                "service",
+                "correlation_id",
+                "tenant_id",
+                "session_id",
+                "request_id",
             ):
                 extra_fields[key] = value
 
@@ -156,7 +177,7 @@ class StructuredJsonFormatter(logging.Formatter):
 
 def configure_logging(config: AppConfig) -> None:
     """Configure structured logging across the service.
-    
+
     Args:
         config: Application configuration
     """
@@ -185,52 +206,55 @@ def configure_logging(config: AppConfig) -> None:
         }
         formatter_name = "plain"
 
-    dictConfig({
-        "version": 1,
-        "disable_existing_loggers": False,
-        "formatters": formatter_config,
-        "filters": {
-            "context": {
-                "()": "app.observability.logging.ContextFilter",
-                "service_name": service_name,
-            }
-        },
-        "handlers": {
-            "default": {
-                "level": log_level,
-                "class": "logging.StreamHandler",
-                "formatter": formatter_name,
-                "filters": ["context"],
-                "stream": "ext://sys.stdout",
-            }
-        },
-        "loggers": {
-            "": {
-                "handlers": ["default"],
-                "level": log_level,
+    dictConfig(
+        {
+            "version": 1,
+            "disable_existing_loggers": False,
+            "formatters": formatter_config,
+            "filters": {
+                "context": {
+                    "()": "app.observability.logging.ContextFilter",
+                    "service_name": service_name,
+                }
             },
-            "uvicorn.error": {
-                "handlers": ["default"],
-                "level": log_level,
-                "propagate": False,
+            "handlers": {
+                "default": {
+                    "level": log_level,
+                    "class": "logging.StreamHandler",
+                    "formatter": formatter_name,
+                    "filters": ["context"],
+                    "stream": "ext://sys.stdout",
+                }
             },
-            "uvicorn.access": {
-                "handlers": ["default"],
-                "level": log_level,
-                "propagate": False,
+            "loggers": {
+                "": {
+                    "handlers": ["default"],
+                    "level": log_level,
+                },
+                "uvicorn.error": {
+                    "handlers": ["default"],
+                    "level": log_level,
+                    "propagate": False,
+                },
+                "uvicorn.access": {
+                    "handlers": ["default"],
+                    "level": log_level,
+                    "propagate": False,
+                },
+                "sqlalchemy.engine": {
+                    "handlers": ["default"],
+                    "level": logging.WARNING,
+                    "propagate": False,
+                },
             },
-            "sqlalchemy.engine": {
-                "handlers": ["default"],
-                "level": logging.WARNING,
-                "propagate": False,
-            },
-        },
-    })
+        }
+    )
 
     # Initialize Sentry if configured
     if config.observability.sentry_dsn:
         try:
             import sentry_sdk
+
             sentry_sdk.init(
                 dsn=config.observability.sentry_dsn,
                 traces_sample_rate=0.1 if config.observability.enable_tracing else 0.0,

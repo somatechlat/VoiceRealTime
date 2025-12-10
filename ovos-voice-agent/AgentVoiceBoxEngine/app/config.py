@@ -23,7 +23,7 @@ class RedisSettings(BaseModel):
 class KafkaSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    bootstrap_servers: str = Field(..., description="Kafka bootstrap servers string")
+    bootstrap_servers: str = Field("localhost:9092", description="Kafka bootstrap servers string")
     client_id: str = Field("ovos-voice-agent", description="Kafka client identifier")
     security_protocol: str = Field("PLAINTEXT", description="Kafka security protocol")
     sasl_mechanism: Optional[str] = Field(None, description="Kafka SASL mechanism if needed")
@@ -34,7 +34,10 @@ class KafkaSettings(BaseModel):
 class DatabaseSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    uri: str = Field(..., description="SQLAlchemy-compatible database URI")
+    uri: str = Field(
+        "postgresql://postgres:postgres@localhost:5432/agentvoicebox",
+        description="SQLAlchemy-compatible database URI",
+    )
     pool_size: int = Field(10, description="Connection pool size")
     max_overflow: int = Field(20, description="Additional connections allowed above pool size")
     echo: bool = Field(False, description="Enable SQL echo for debugging")
@@ -43,7 +46,7 @@ class DatabaseSettings(BaseModel):
 class OPASettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    url: str = Field(..., description="OPA HTTP API base URL")
+    url: str = Field("http://localhost:8181", description="OPA HTTP API base URL")
     decision_path: str = Field("/v1/data/voice/allow", description="Policy decision endpoint")
     timeout_seconds: int = Field(3, description="OPA HTTP request timeout")
 
@@ -75,7 +78,7 @@ class SecuritySettings(BaseModel):
     default_secret_ttl_seconds: int = Field(
         600, description="Default lifetime for realtime client secrets"
     )
-    rate_limits: RateLimitSettings = RateLimitSettings()
+    rate_limits: RateLimitSettings = RateLimitSettings()  # type: ignore[call-arg]
 
 
 class AppConfig(BaseSettings):
@@ -94,12 +97,12 @@ class AppConfig(BaseSettings):
         ..., alias="APP_SECRET_KEY", description="Secret key used for Flask session signing"
     )
 
-    redis: RedisSettings = RedisSettings()
-    kafka: KafkaSettings
-    database: DatabaseSettings
-    opa: OPASettings
-    security: SecuritySettings = SecuritySettings()
-    observability: ObservabilitySettings = ObservabilitySettings()
+    redis: RedisSettings = RedisSettings()  # type: ignore[call-arg]
+    kafka: KafkaSettings = KafkaSettings()  # type: ignore[call-arg]
+    database: DatabaseSettings = DatabaseSettings()  # type: ignore[call-arg]
+    opa: OPASettings = OPASettings()  # type: ignore[call-arg]
+    security: SecuritySettings = SecuritySettings()  # type: ignore[call-arg]
+    observability: ObservabilitySettings = ObservabilitySettings()  # type: ignore[call-arg]
 
     def to_flask_config(self) -> Dict[str, Any]:
         return {
@@ -111,7 +114,7 @@ class AppConfig(BaseSettings):
 def configure_app_from_env() -> AppConfig:
     """Load configuration using the default environment-aware settings class."""
 
-    return AppConfig()
+    return AppConfig()  # type: ignore[call-arg]
 
 
 __all__ = [

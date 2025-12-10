@@ -19,14 +19,16 @@ an instantiated provider ready for use.
 
 from __future__ import annotations
 
-# Standard library imports – sorted alphabetically per PEP8
-from abc import ABC, abstractmethod
 import base64
 import io
 import os
 import subprocess
 import tempfile
-from typing import Any, AsyncIterator, Dict
+
+# Standard library imports – sorted alphabetically per PEP8
+from abc import ABC, abstractmethod
+from collections.abc import AsyncGenerator
+from typing import Any, Dict
 
 
 class TTSProvider(ABC):
@@ -38,15 +40,20 @@ class TTSProvider(ABC):
     """
 
     @abstractmethod
-    async def synthesize(
-        self, text: str, voice: str | None = None, speed: float | None = None, cancel_flag: Any = None
-    ) -> AsyncIterator[str]:
+    def synthesize(
+        self,
+        text: str,
+        voice: str | None = None,
+        speed: float | None = None,
+        cancel_flag: Any = None,
+    ) -> AsyncGenerator[str, None]:
         """Yield base64‑encoded WAV chunks.
 
         ``cancel_flag`` is a mutable object (e.g., ``RealtimeWS``) that
         provides a ``_cancel_current`` attribute.  The provider should break
         the iteration as soon as the flag becomes ``True``.
         """
+        ...
 
 
 class KokoroProvider(TTSProvider):
@@ -76,8 +83,12 @@ class KokoroProvider(TTSProvider):
             self._engine = None
 
     async def synthesize(
-        self, text: str, voice: str | None = None, speed: float | None = None, cancel_flag: Any = None
-    ) -> AsyncIterator[str]:
+        self,
+        text: str,
+        voice: str | None = None,
+        speed: float | None = None,
+        cancel_flag: Any = None,
+    ) -> AsyncGenerator[str, None]:
         import soundfile as sf  # type: ignore
 
         if self._engine is None:
@@ -111,8 +122,12 @@ class PiperProvider(TTSProvider):
         self._default_voice = os.getenv("PIPER_VOICE", "/app/voices/en_US-amy-medium.onnx")
 
     async def synthesize(
-        self, text: str, voice: str | None = None, speed: float | None = None, cancel_flag: Any = None
-    ) -> AsyncIterator[str]:
+        self,
+        text: str,
+        voice: str | None = None,
+        speed: float | None = None,
+        cancel_flag: Any = None,
+    ) -> AsyncGenerator[str, None]:
         if not os.path.isfile(self._piper_bin) or not os.access(self._piper_bin, os.X_OK):
             return
         voice_path = voice or self._default_voice
@@ -140,8 +155,12 @@ class PiperProvider(TTSProvider):
 
 class EspeakProvider(TTSProvider):
     async def synthesize(
-        self, text: str, voice: str | None = None, speed: float | None = None, cancel_flag: Any = None
-    ) -> AsyncIterator[str]:
+        self,
+        text: str,
+        voice: str | None = None,
+        speed: float | None = None,
+        cancel_flag: Any = None,
+    ) -> AsyncGenerator[str, None]:
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf:
             tmp_path = tf.name
         try:
@@ -189,8 +208,10 @@ def get_provider() -> TTSProvider:
             return provider_cls()
         except Exception:
             continue
+
     class NullProvider(TTSProvider):
-        async def synthesize(self, *_, **__) -> AsyncIterator[str]:
+        async def synthesize(self, *_, **__) -> AsyncGenerator[str, None]:
             if False:
                 yield ""
+
     return NullProvider()

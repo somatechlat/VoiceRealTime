@@ -32,8 +32,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from app.config import RedisSettings
 from app.services.redis_client import RedisClient
 from app.services.redis_streams import (
-    RedisStreamsClient,
     AudioSTTRequest,
+    RedisStreamsClient,
     TTSRequest,
 )
 
@@ -45,18 +45,27 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:16379/0")
 
 # Sample audio (1 second of silence)
 SAMPLE_AUDIO_WAV = base64.b64encode(
-    b'RIFF' + (36 + 32000).to_bytes(4, 'little') + b'WAVE' +
-    b'fmt ' + (16).to_bytes(4, 'little') +
-    (1).to_bytes(2, 'little') + (1).to_bytes(2, 'little') +
-    (16000).to_bytes(4, 'little') + (32000).to_bytes(4, 'little') +
-    (2).to_bytes(2, 'little') + (16).to_bytes(2, 'little') +
-    b'data' + (32000).to_bytes(4, 'little') + b'\x00' * 32000
-).decode('ascii')
+    b"RIFF"
+    + (36 + 32000).to_bytes(4, "little")
+    + b"WAVE"
+    + b"fmt "
+    + (16).to_bytes(4, "little")
+    + (1).to_bytes(2, "little")
+    + (1).to_bytes(2, "little")
+    + (16000).to_bytes(4, "little")
+    + (32000).to_bytes(4, "little")
+    + (2).to_bytes(2, "little")
+    + (16).to_bytes(2, "little")
+    + b"data"
+    + (32000).to_bytes(4, "little")
+    + b"\x00" * 32000
+).decode("ascii")
 
 
 @dataclass
 class LatencyMetrics:
     """Latency metrics for pipeline stages."""
+
     stt_latencies_ms: List[float] = field(default_factory=list)
     tts_ttfb_latencies_ms: List[float] = field(default_factory=list)
     tts_total_latencies_ms: List[float] = field(default_factory=list)
@@ -81,7 +90,9 @@ class LatencyMetrics:
             "stt_p95_ms": self.stt_p95(),
             "stt_avg_ms": statistics.mean(self.stt_latencies_ms) if self.stt_latencies_ms else None,
             "tts_ttfb_p95_ms": self.tts_ttfb_p95(),
-            "tts_ttfb_avg_ms": statistics.mean(self.tts_ttfb_latencies_ms) if self.tts_ttfb_latencies_ms else None,
+            "tts_ttfb_avg_ms": (
+                statistics.mean(self.tts_ttfb_latencies_ms) if self.tts_ttfb_latencies_ms else None
+            ),
             "e2e_avg_ms": statistics.mean(self.e2e_latencies_ms) if self.e2e_latencies_ms else None,
         }
 
@@ -102,10 +113,9 @@ async def streams_client(redis_client):
     return RedisStreamsClient(redis_client)
 
 
-
 class TestSTTLatency:
     """Test STT latency meets SLA targets.
-    
+
     Requirement: STT p95 < 500ms
     """
 
@@ -199,7 +209,7 @@ class TestSTTLatency:
 
 class TestTTSLatency:
     """Test TTS latency meets SLA targets.
-    
+
     Requirement: TTS TTFB p95 < 200ms
     """
 
@@ -287,7 +297,6 @@ class TestTTSLatency:
         p95 = metrics.tts_ttfb_p95()
         assert p95 is not None
         assert p95 < 200, f"TTS TTFB p95 {p95}ms exceeds 200ms SLA"
-
 
 
 class TestConcurrentSessions:
@@ -395,14 +404,14 @@ class TestConcurrentSessions:
 
 class TestFullPipeline:
     """Test full speech-to-speech pipeline.
-    
+
     Audio → STT → LLM → TTS → Audio
     """
 
     @pytest.mark.asyncio
     async def test_full_pipeline_infrastructure(self, redis_client, streams_client):
         """Test that full pipeline infrastructure is wired correctly.
-        
+
         This test verifies the message passing works end-to-end.
         Full pipeline requires all workers running.
         """

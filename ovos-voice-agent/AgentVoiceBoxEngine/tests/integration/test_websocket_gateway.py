@@ -18,19 +18,17 @@ Run with:
 import asyncio
 import json
 import os
-import signal
 import sys
 import time
-import uuid
-from typing import List, Optional
+from typing import List
 
 import pytest
-import pytest_asyncio
 
 # websockets library for WebSocket client
 try:
     import websockets
     from websockets.client import WebSocketClientProtocol
+
     WEBSOCKETS_AVAILABLE = True
 except ImportError:
     WEBSOCKETS_AVAILABLE = False
@@ -39,6 +37,7 @@ except ImportError:
 # httpx for REST API calls
 try:
     import httpx
+
     HTTPX_AVAILABLE = True
 except ImportError:
     HTTPX_AVAILABLE = False
@@ -50,8 +49,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 pytestmark = [
     pytest.mark.asyncio(loop_scope="function"),
     pytest.mark.skipif(
-        not WEBSOCKETS_AVAILABLE or not HTTPX_AVAILABLE,
-        reason="websockets and httpx required"
+        not WEBSOCKETS_AVAILABLE or not HTTPX_AVAILABLE, reason="websockets and httpx required"
     ),
 ]
 
@@ -80,10 +78,9 @@ async def wait_for_gateway(url: str, timeout: float = 30.0) -> bool:
     return False
 
 
-
 class TestWebSocketConnectionLifecycle:
     """Test WebSocket connection lifecycle.
-    
+
     Requirements: 7.1, 7.2
     """
 
@@ -147,7 +144,7 @@ class TestWebSocketConnectionLifecycle:
                     "session": {
                         "instructions": "You are a helpful test assistant.",
                         "voice": "af_bella",
-                    }
+                    },
                 }
                 await ws.send(json.dumps(update_msg))
 
@@ -170,7 +167,7 @@ class TestWebSocketConnectionLifecycle:
             # Wait for session.created
             response = await asyncio.wait_for(ws.recv(), timeout=5.0)
             session_data = json.loads(response)
-            session_id = session_data.get("session", {}).get("id")
+            session_data.get("session", {}).get("id")
 
             # Close gracefully
             await ws.close()
@@ -182,12 +179,11 @@ class TestWebSocketConnectionLifecycle:
             pytest.skip(f"Gateway rejected connection: {e}")
 
 
-
 class TestSessionReconnection:
     """Test session reconnection to different gateway instance.
-    
+
     Requirements: 7.6
-    Property 1: Session State Consistency - Session state should be 
+    Property 1: Session State Consistency - Session state should be
     accessible from any gateway instance.
     """
 
@@ -201,12 +197,12 @@ class TestSessionReconnection:
             async with websockets.connect(ws_url_1, close_timeout=5) as ws1:
                 response = await asyncio.wait_for(ws1.recv(), timeout=5.0)
                 session_data = json.loads(response)
-                session_id = session_data.get("session", {}).get("id")
+                session_data.get("session", {}).get("id")
 
                 # Update session config
                 update_msg = {
                     "type": "session.update",
-                    "session": {"voice": "am_adam", "speed": 1.5}
+                    "session": {"voice": "am_adam", "speed": 1.5},
                 }
                 await ws1.send(json.dumps(update_msg))
                 await asyncio.wait_for(ws1.recv(), timeout=5.0)
@@ -221,7 +217,7 @@ class TestSessionReconnection:
 
 class TestRateLimiting:
     """Test rate limiting rejection with proper error codes.
-    
+
     Requirements: 6.1, 6.2
     """
 
@@ -265,7 +261,7 @@ class TestRateLimiting:
 
 class TestConcurrentConnections:
     """Test concurrent connections (50+ simultaneous).
-    
+
     Requirements: 7.1
     """
 
@@ -281,8 +277,7 @@ class TestConcurrentConnections:
             for i in range(50):
                 try:
                     ws = await asyncio.wait_for(
-                        websockets.connect(ws_url, close_timeout=5),
-                        timeout=10.0
+                        websockets.connect(ws_url, close_timeout=5), timeout=10.0
                     )
                     # Wait for session.created
                     response = await asyncio.wait_for(ws.recv(), timeout=5.0)
@@ -290,7 +285,7 @@ class TestConcurrentConnections:
                     if data.get("type") == "session.created":
                         connections.append(ws)
                         successful += 1
-                except Exception as e:
+                except Exception:
                     # Some connections may fail due to rate limiting
                     pass
 
@@ -321,10 +316,9 @@ class TestConcurrentConnections:
             for i in range(10):
                 try:
                     ws = await asyncio.wait_for(
-                        websockets.connect(ws_url, close_timeout=5),
-                        timeout=10.0
+                        websockets.connect(ws_url, close_timeout=5), timeout=10.0
                     )
-                    response = await asyncio.wait_for(ws.recv(), timeout=5.0)
+                    await asyncio.wait_for(ws.recv(), timeout=5.0)
                     connections.append(ws)
                 except Exception:
                     pass
@@ -336,7 +330,7 @@ class TestConcurrentConnections:
             async def send_update(ws, index):
                 update_msg = {
                     "type": "session.update",
-                    "session": {"instructions": f"Test instruction {index}"}
+                    "session": {"instructions": f"Test instruction {index}"},
                 }
                 await ws.send(json.dumps(update_msg))
                 response = await asyncio.wait_for(ws.recv(), timeout=5.0)
@@ -347,8 +341,7 @@ class TestConcurrentConnections:
 
             # Most should succeed
             successes = sum(
-                1 for r in results
-                if isinstance(r, dict) and r.get("type") == "session.updated"
+                1 for r in results if isinstance(r, dict) and r.get("type") == "session.updated"
             )
             assert successes >= len(connections) // 2
 
@@ -360,14 +353,13 @@ class TestConcurrentConnections:
                     pass
 
 
-
 class TestGracefulShutdown:
     """Test graceful shutdown with active connections (SIGTERM).
-    
+
     Requirements: 7.4
-    Property 6: Connection Draining - For any gateway shutdown, all existing 
+    Property 6: Connection Draining - For any gateway shutdown, all existing
     connections SHALL be gracefully closed with proper cleanup within 30 seconds.
-    
+
     Note: This test requires ability to send SIGTERM to gateway container.
     In CI, this may need to be run manually or with docker-compose control.
     """
@@ -413,7 +405,7 @@ class TestHealthEndpoints:
 
 class TestErrorHandling:
     """Test error handling and error response format.
-    
+
     Requirements: 16.1
     """
 
@@ -453,10 +445,7 @@ class TestErrorHandling:
                 await asyncio.wait_for(ws.recv(), timeout=5.0)
 
                 # Send unknown event type
-                await ws.send(json.dumps({
-                    "type": "unknown.event.type",
-                    "data": {}
-                }))
+                await ws.send(json.dumps({"type": "unknown.event.type", "data": {}}))
 
                 # Should receive error
                 response = await asyncio.wait_for(ws.recv(), timeout=5.0)

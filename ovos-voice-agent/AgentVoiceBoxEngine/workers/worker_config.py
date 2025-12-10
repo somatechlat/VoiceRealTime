@@ -12,6 +12,7 @@ from pydantic.config import ConfigDict
 
 class RedisSettings(BaseModel):
     """Redis connection settings."""
+
     model_config = ConfigDict(extra="forbid")
 
     url: str = Field("redis://localhost:6379/0", description="Redis connection URL")

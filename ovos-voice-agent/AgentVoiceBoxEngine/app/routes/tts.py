@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+
 from flask import Blueprint, jsonify
 
 tts_blueprint = Blueprint("tts", __name__)
@@ -17,6 +18,7 @@ def list_voices():
     if engine in {"kokoro", "piper"}:  # try kokoro first
         try:
             import kokoro_onnx as K  # type: ignore
+
             model_dir = os.getenv("KOKORO_MODEL_DIR", "/app/cache/kokoro")
             model_file = os.getenv("KOKORO_MODEL_FILE", "kokoro-v1.0.onnx")
             voices_file = os.getenv("KOKORO_VOICES_FILE", "voices-v1.0.bin")

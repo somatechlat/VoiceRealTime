@@ -7,14 +7,14 @@ from typing import Optional
 from flask import current_app
 
 from .config import AppConfig, configure_app_from_env
-from .services.opa_client import OPAClient
-from .services.session_service import SessionService
-from .services.token_service import TokenService
-from .services.redis_client import RedisClient
+from .services.connection_manager import ConnectionManager
 from .services.distributed_rate_limiter import DistributedRateLimiter, RateLimitConfig
 from .services.distributed_session import DistributedSessionManager
-from .services.connection_manager import ConnectionManager
+from .services.opa_client import OPAClient
+from .services.redis_client import RedisClient
 from .services.redis_streams import RedisStreamsClient
+from .services.session_service import SessionService
+from .services.token_service import TokenService
 from .utils.database import create_session_factory
 
 
@@ -61,7 +61,7 @@ def get_token_service() -> TokenService:
 
 def get_redis_client() -> Optional[RedisClient]:
     """Get the Redis client instance.
-    
+
     Returns None if Redis is not configured or not connected.
     """
     return current_app.extensions.get("redis_client")
@@ -69,7 +69,7 @@ def get_redis_client() -> Optional[RedisClient]:
 
 def get_rate_limiter() -> Optional[DistributedRateLimiter]:
     """Get the distributed rate limiter instance.
-    
+
     Returns None if Redis is not available (falls back to in-memory).
     """
     rate_limiter = current_app.extensions.get("rate_limiter")
@@ -88,7 +88,7 @@ def get_rate_limiter() -> Optional[DistributedRateLimiter]:
 
 def get_distributed_session_manager() -> Optional[DistributedSessionManager]:
     """Get the distributed session manager instance.
-    
+
     Returns None if Redis is not available (falls back to PostgreSQL).
     """
     manager = current_app.extensions.get("distributed_session_manager")
@@ -96,6 +96,7 @@ def get_distributed_session_manager() -> Optional[DistributedSessionManager]:
         redis_client = get_redis_client()
         if redis_client is not None:
             import os
+
             gateway_id = os.getenv("GATEWAY_ID", f"gateway-{os.getpid()}")
             manager = DistributedSessionManager(redis_client, gateway_id)
             current_app.extensions["distributed_session_manager"] = manager

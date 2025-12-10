@@ -12,6 +12,7 @@ Actions logged:
 - User authentication events
 - Settings changes
 """
+
 from __future__ import annotations
 
 import datetime as dt
@@ -211,7 +212,9 @@ class AuditService:
                 tenant_id=entry.tenant_id,
                 actor_id=entry.actor_id,
                 actor_type=entry.actor_type,
-                action=entry.action.value if isinstance(entry.action, AuditAction) else entry.action,
+                action=(
+                    entry.action.value if isinstance(entry.action, AuditAction) else entry.action
+                ),
                 resource_type=entry.resource_type,
                 resource_id=entry.resource_id,
                 details=entry.details,

@@ -11,6 +11,7 @@ API Key Format: avb_{prefix}_{random} (32 chars total)
 - prefix = 8 char identifier for lookup
 - random = 16 char random suffix
 """
+
 from __future__ import annotations
 
 import datetime as dt
@@ -26,15 +27,17 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 # argon2-cffi is the recommended Argon2 library
+ARGON2_AVAILABLE = False
+PasswordHasher: Any = None
+VerifyMismatchError: Any = ValueError
+InvalidHash: Any = ValueError
+
 try:
     from argon2 import PasswordHasher
-    from argon2.exceptions import VerifyMismatchError, InvalidHash
+    from argon2.exceptions import InvalidHash, VerifyMismatchError
+
     ARGON2_AVAILABLE = True
 except ImportError:
-    ARGON2_AVAILABLE = False
-    PasswordHasher = None
-    VerifyMismatchError = Exception
-    InvalidHash = Exception
     logger.warning("argon2-cffi not installed - using fallback hashing")
 
 
@@ -79,11 +82,11 @@ class APIKeyHasher:
         if ARGON2_AVAILABLE:
             # Argon2id with recommended parameters
             self._hasher = PasswordHasher(
-                time_cost=2,        # iterations
+                time_cost=2,  # iterations
                 memory_cost=65536,  # 64 MB
-                parallelism=1,      # threads
-                hash_len=32,        # output length
-                salt_len=16,        # salt length
+                parallelism=1,  # threads
+                hash_len=32,  # output length
+                salt_len=16,  # salt length
             )
         else:
             self._hasher = None
@@ -115,7 +118,7 @@ class APIKeyHasher:
             return False
         except (VerifyMismatchError, InvalidHash):
             return False
-        except Exception as e:
+        except (ValueError, TypeError) as e:
             logger.error("API key verification error: %s", e)
             return False
 
@@ -257,6 +260,7 @@ class APIKeyService:
         """Check Redis cache for API key info."""
         try:
             import json
+
             cache_key = self._cache_key(prefix)
             data = await self._redis.client.get(cache_key)
             if data:
@@ -285,16 +289,19 @@ class APIKeyService:
             return
         try:
             import json
+
             cache_key = self._cache_key(prefix)
-            data = json.dumps({
-                "key_id": str(info.key_id),
-                "tenant_id": str(info.tenant_id),
-                "project_id": str(info.project_id),
-                "scopes": info.scopes,
-                "rate_limit_tier": info.rate_limit_tier,
-                "is_active": info.is_active,
-                "expires_at": info.expires_at.isoformat() if info.expires_at else None,
-            })
+            data = json.dumps(
+                {
+                    "key_id": str(info.key_id),
+                    "tenant_id": str(info.tenant_id),
+                    "project_id": str(info.project_id),
+                    "scopes": info.scopes,
+                    "rate_limit_tier": info.rate_limit_tier,
+                    "is_active": info.is_active,
+                    "expires_at": info.expires_at.isoformat() if info.expires_at else None,
+                }
+            )
             await self._redis.client.setex(cache_key, self.CACHE_TTL, data)
         except Exception as e:
             logger.warning("Redis cache write error: %s", e)
@@ -305,23 +312,21 @@ class APIKeyService:
             return None
 
         try:
-            from ..utils.database import session_scope
             from ..models.tenant import APIKey, Project
+            from ..utils.database import session_scope
 
             with session_scope(self._db_factory) as session:
                 key_record = (
                     session.query(APIKey)
                     .filter(APIKey.key_prefix == prefix)
-                    .filter(APIKey.is_active == True)
+                    .filter(APIKey.is_active.is_(True))
                     .first()
                 )
 
                 if not key_record:
                     return None
 
-                project = session.query(Project).filter(
-                    Project.id == key_record.project_id
-                ).first()
+                project = session.query(Project).filter(Project.id == key_record.project_id).first()
 
                 if not project:
                     return None

@@ -19,9 +19,9 @@ from .observability.metrics import init_metrics
 from .routes.health import health_blueprint
 from .routes.realtime import realtime_blueprint
 from .routes.tts import tts_blueprint
-from .services.redis_client import RedisClient
-from .services.distributed_session import DistributedSessionManager
 from .services.connection_manager import init_connection_manager, setup_signal_handlers
+from .services.distributed_session import DistributedSessionManager
+from .services.redis_client import RedisClient
 from .services.redis_streams import init_streams_client
 from .transports import register_transports
 
@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 try:
     from flask_cors import CORS
 except Exception:  # pragma: no cover – package may be absent in minimal environments
+
     def CORS(app, *_, **__):  # type: ignore[override]
         """Fallback stub for ``flask_cors.CORS`` when the library is unavailable.
 
@@ -39,6 +40,7 @@ except Exception:  # pragma: no cover – package may be absent in minimal envir
         we provide a no‑op function that simply returns the app unchanged.
         """
         return app
+
 
 def _run_async(coro):
     """Run an async coroutine from sync context."""
@@ -55,34 +57,33 @@ def _run_async(coro):
 
 def _init_redis(app: Flask, cfg: AppConfig) -> None:
     """Initialize Redis client and distributed session manager.
-    
+
     Redis is used for:
     - Distributed session state (cross-gateway access)
     - Rate limiting (already implemented)
     - Pub/sub for real-time events
-    
+
     PostgreSQL remains the source of truth for persistence.
     """
     try:
         redis_client = RedisClient(cfg.redis)
         _run_async(redis_client.connect())
-        
+
         gateway_id = os.getenv("GATEWAY_ID", f"gateway-{os.getpid()}")
         session_manager = DistributedSessionManager(redis_client, gateway_id)
         session_manager.start_cleanup_task()
-        
+
         # Initialize Redis Streams client for worker communication
         streams_client = init_streams_client(redis_client)
-        
+
         app.extensions["redis_client"] = redis_client
         app.extensions["distributed_session_manager"] = session_manager
         app.extensions["redis_streams_client"] = streams_client
-        
+
         logger.info(
-            "Redis initialized",
-            extra={"gateway_id": gateway_id, "redis_url": cfg.redis.url}
+            "Redis initialized", extra={"gateway_id": gateway_id, "redis_url": cfg.redis.url}
         )
-        
+
         # Register cleanup on app shutdown
         def cleanup_redis():
             try:
@@ -91,13 +92,11 @@ def _init_redis(app: Flask, cfg: AppConfig) -> None:
                 logger.info("Redis connection closed on shutdown")
             except Exception as e:
                 logger.warning(f"Error closing Redis: {e}")
-        
+
         atexit.register(cleanup_redis)
-        
+
     except Exception as e:
-        logger.warning(
-            f"Redis initialization failed, falling back to PostgreSQL-only mode: {e}"
-        )
+        logger.warning(f"Redis initialization failed, falling back to PostgreSQL-only mode: {e}")
         app.extensions["redis_client"] = None
         app.extensions["distributed_session_manager"] = None
 
@@ -118,7 +117,7 @@ def create_app(config: AppConfig | None = None) -> Flask:
     # Initialize connection manager for graceful shutdown (30s drain per design)
     connection_manager = init_connection_manager(drain_timeout_seconds=30)
     app.extensions["connection_manager"] = connection_manager
-    
+
     # Set up SIGTERM/SIGINT handlers for Kubernetes graceful shutdown
     # Skip in testing mode to avoid interfering with test runners
     if cfg.flask_env != "testing":

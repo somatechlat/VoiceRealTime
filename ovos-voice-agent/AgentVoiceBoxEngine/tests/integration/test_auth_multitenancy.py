@@ -19,7 +19,6 @@ import os
 import sys
 import time
 import uuid
-from datetime import datetime, timedelta
 
 import pytest
 import pytest_asyncio
@@ -28,14 +27,15 @@ import pytest_asyncio
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from app.config import RedisSettings
-from app.services.redis_client import RedisClient
-from app.services.distributed_session import DistributedSessionManager, SessionConfig
 from app.services.distributed_rate_limiter import DistributedRateLimiter, RateLimitConfig
+from app.services.distributed_session import DistributedSessionManager, SessionConfig
+from app.services.redis_client import RedisClient
 
 # Optional imports for API key service
 try:
-    from app.services.api_key_service import APIKeyService, APIKeyData
-    from app.services.ephemeral_token_service import EphemeralTokenService
+    from app.services.api_key_service import APIKeyData, APIKeyService  # noqa: F401
+    from app.services.ephemeral_token_service import EphemeralTokenService  # noqa: F401
+
     API_KEY_SERVICE_AVAILABLE = True
 except ImportError:
     API_KEY_SERVICE_AVAILABLE = False
@@ -57,7 +57,7 @@ pytestmark = pytest.mark.asyncio(loop_scope="function")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:16379/0")
 DATABASE_URL = os.getenv(
     "DATABASE_URI",
-    "postgresql://agentvoicebox:agentvoicebox_secure_pwd_2024@localhost:15432/agentvoicebox"
+    "postgresql://agentvoicebox:agentvoicebox_secure_pwd_2024@localhost:15432/agentvoicebox",
 )
 
 
@@ -83,13 +83,12 @@ async def db_client():
     await client.close()
 
 
-
 class TestAPIKeyValidation:
     """Test API key validation against real PostgreSQL.
-    
+
     Requirements: 3.1, 3.2, 3.3
-    Property 10: Authentication Enforcement - For any WebSocket connection 
-    attempt without a valid token, the connection SHALL be rejected with 
+    Property 10: Authentication Enforcement - For any WebSocket connection
+    attempt without a valid token, the connection SHALL be rejected with
     authentication_error before any session state is created.
     """
 
@@ -99,7 +98,7 @@ class TestAPIKeyValidation:
         """Test API key creation and validation."""
         # This test requires the api_keys table to exist
         # Create test API key data
-        tenant_id = uuid.uuid4()
+        uuid.uuid4()
         project_id = uuid.uuid4()
         key_prefix = "sk_test_"
 
@@ -127,9 +126,7 @@ class TestAPIKeyValidation:
             )
 
             # Verify key exists
-            record = await db_client.fetchrow(
-                "SELECT * FROM api_keys WHERE id = $1", key_id
-            )
+            record = await db_client.fetchrow("SELECT * FROM api_keys WHERE id = $1", key_id)
             assert record is not None
             assert record["key_prefix"] == key_prefix
             assert record["is_active"] is True
@@ -170,7 +167,7 @@ class TestAPIKeyValidation:
 
 class TestEphemeralTokenFlow:
     """Test ephemeral token flow (issue, validate, expire).
-    
+
     Requirements: 3.5, 3.6
     """
 
@@ -260,10 +257,9 @@ class TestEphemeralTokenFlow:
         assert exists == 0
 
 
-
 class TestTenantIsolationRedis:
     """Test tenant isolation in Redis keys.
-    
+
     Requirements: 1.2, 1.3
     """
 
@@ -362,7 +358,7 @@ class TestTenantIsolationRedis:
 
 class TestCrossTenantAccessDenial:
     """Test cross-tenant access denial.
-    
+
     Requirements: 1.3, 1.4
     """
 

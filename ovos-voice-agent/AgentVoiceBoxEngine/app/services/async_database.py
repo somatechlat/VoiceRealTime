@@ -7,6 +7,7 @@ This module provides async PostgreSQL access for:
 
 Requirements: 13.1, 13.3, 13.5
 """
+
 from __future__ import annotations
 
 import datetime as dt
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 try:
     import asyncpg
     from asyncpg import Connection, Pool, Record
+
     ASYNCPG_AVAILABLE = True
 except ImportError:
     ASYNCPG_AVAILABLE = False
@@ -36,6 +38,7 @@ except ImportError:
 @dataclass
 class AsyncDatabaseConfig:
     """Database connection configuration for asyncpg."""
+
     host: str = "localhost"
     port: int = 5432
     database: str = "voice_agent"
@@ -99,8 +102,12 @@ class AsyncDatabaseClient:
         logger.info("Async database pool created")
 
     async def _init_connection(self, conn: Connection) -> None:
-        await conn.set_type_codec("jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog")
-        await conn.set_type_codec("json", encoder=json.dumps, decoder=json.loads, schema="pg_catalog")
+        await conn.set_type_codec(
+            "jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog"
+        )
+        await conn.set_type_codec(
+            "json", encoder=json.dumps, decoder=json.loads, schema="pg_catalog"
+        )
 
     async def close(self) -> None:
         if self._pool is not None:
@@ -153,6 +160,7 @@ class AsyncDatabaseClient:
 @dataclass
 class ConversationItemData:
     """Conversation item for PostgreSQL persistence."""
+
     session_id: str
     tenant_id: Optional[uuid.UUID] = None
     role: str = ""
@@ -174,13 +182,21 @@ class AsyncConversationRepository:
             RETURNING id, session_id, tenant_id, role, content, created_at
         """
         record = await self.db.fetchrow(
-            query, item.session_id, item.tenant_id, item.role, item.content,
+            query,
+            item.session_id,
+            item.tenant_id,
+            item.role,
+            item.content,
             item.created_at or dt.datetime.utcnow(),
         )
         if record:
             return ConversationItemData(
-                id=record["id"], session_id=record["session_id"], tenant_id=record["tenant_id"],
-                role=record["role"], content=record["content"], created_at=record["created_at"],
+                id=record["id"],
+                session_id=record["session_id"],
+                tenant_id=record["tenant_id"],
+                role=record["role"],
+                content=record["content"],
+                created_at=record["created_at"],
             )
         return item
 
@@ -191,27 +207,53 @@ class AsyncConversationRepository:
             query = """INSERT INTO conversation_items (session_id, tenant_id, role, content, created_at) VALUES ($1, $2, $3, $4, $5)"""
             count = 0
             for item in items:
-                await conn.execute(query, item.session_id, item.tenant_id, item.role, item.content, item.created_at or dt.datetime.utcnow())
+                await conn.execute(
+                    query,
+                    item.session_id,
+                    item.tenant_id,
+                    item.role,
+                    item.content,
+                    item.created_at or dt.datetime.utcnow(),
+                )
                 count += 1
             return count
 
-    async def get_by_session(self, session_id: str, tenant_id: Optional[uuid.UUID] = None, limit: int = 100) -> List[ConversationItemData]:
+    async def get_by_session(
+        self, session_id: str, tenant_id: Optional[uuid.UUID] = None, limit: int = 100
+    ) -> List[ConversationItemData]:
         if tenant_id:
             query = """SELECT id, session_id, tenant_id, role, content, created_at FROM conversation_items WHERE session_id = $1 AND tenant_id = $2 ORDER BY created_at ASC LIMIT $3"""
             records = await self.db.fetch(query, session_id, tenant_id, limit)
         else:
             query = """SELECT id, session_id, tenant_id, role, content, created_at FROM conversation_items WHERE session_id = $1 ORDER BY created_at ASC LIMIT $2"""
             records = await self.db.fetch(query, session_id, limit)
-        return [ConversationItemData(id=r["id"], session_id=r["session_id"], tenant_id=r["tenant_id"], role=r["role"], content=r["content"], created_at=r["created_at"]) for r in records]
+        return [
+            ConversationItemData(
+                id=r["id"],
+                session_id=r["session_id"],
+                tenant_id=r["tenant_id"],
+                role=r["role"],
+                content=r["content"],
+                created_at=r["created_at"],
+            )
+            for r in records
+        ]
 
     async def count_by_session(self, session_id: str, tenant_id: Optional[uuid.UUID] = None) -> int:
         if tenant_id:
-            return await self.db.fetchval("SELECT COUNT(*) FROM conversation_items WHERE session_id = $1 AND tenant_id = $2", session_id, tenant_id)
-        return await self.db.fetchval("SELECT COUNT(*) FROM conversation_items WHERE session_id = $1", session_id)
+            return await self.db.fetchval(
+                "SELECT COUNT(*) FROM conversation_items WHERE session_id = $1 AND tenant_id = $2",
+                session_id,
+                tenant_id,
+            )
+        return await self.db.fetchval(
+            "SELECT COUNT(*) FROM conversation_items WHERE session_id = $1", session_id
+        )
 
 
 class ConversationOverflowHandler:
     """Handles Redis-to-PostgreSQL overflow for conversation items."""
+
     MAX_REDIS_ITEMS = 100
     OVERFLOW_BATCH_SIZE = 50
 
@@ -235,7 +277,15 @@ class ConversationOverflowHandler:
         for item_str in items_json:
             try:
                 item_data = json.loads(item_str)
-                items_to_persist.append(ConversationItemData(session_id=session_id, tenant_id=tenant_uuid, role=item_data.get("role", ""), content=item_data, created_at=dt.datetime.utcnow()))
+                items_to_persist.append(
+                    ConversationItemData(
+                        session_id=session_id,
+                        tenant_id=tenant_uuid,
+                        role=item_data.get("role", ""),
+                        content=item_data,
+                        created_at=dt.datetime.utcnow(),
+                    )
+                )
             except json.JSONDecodeError:
                 logger.warning("Failed to parse overflow item")
         if items_to_persist:
@@ -274,7 +324,13 @@ async def close_async_database() -> None:
 
 
 __all__ = [
-    "ASYNCPG_AVAILABLE", "AsyncDatabaseConfig", "AsyncDatabaseClient",
-    "ConversationItemData", "AsyncConversationRepository", "ConversationOverflowHandler",
-    "get_async_database", "get_database", "close_async_database",
+    "ASYNCPG_AVAILABLE",
+    "AsyncDatabaseConfig",
+    "AsyncDatabaseClient",
+    "ConversationItemData",
+    "AsyncConversationRepository",
+    "ConversationOverflowHandler",
+    "get_async_database",
+    "get_database",
+    "close_async_database",
 ]

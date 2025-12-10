@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SessionConfig:
     """Session configuration matching OpenAI Realtime API."""
+
     model: str = "ovos-voice-1"
     voice: str = "am_onyx"
     speed: float = 1.1
@@ -71,6 +72,7 @@ class SessionConfig:
 @dataclass
 class Session:
     """Session state stored in Redis."""
+
     id: str
     tenant_id: str
     project_id: Optional[str]
@@ -116,7 +118,7 @@ class Session:
 
 class DistributedSessionManager:
     """Redis-backed session management for cross-gateway access.
-    
+
     This manager stores session state in Redis with:
     - 30-second TTL refreshed by heartbeat
     - Pub/sub notifications on session updates
@@ -168,20 +170,20 @@ class DistributedSessionManager:
         persona: Optional[Dict[str, Any]] = None,
     ) -> Session:
         """Create a new session in Redis.
-        
+
         Args:
             session_id: Unique session identifier
             tenant_id: Tenant ID for isolation
             project_id: Optional project ID
             config: Session configuration
             persona: Optional persona configuration
-            
+
         Returns:
             Created Session object
         """
         now = time.time()
         conversation_id = f"conv_{session_id.replace('sess_', '')}"
-        
+
         session = Session(
             id=session_id,
             tenant_id=tenant_id,
@@ -196,7 +198,7 @@ class DistributedSessionManager:
         )
 
         key = self._session_key(tenant_id, session_id)
-        
+
         # Store session as hash
         await self._redis.hset(key, session.to_dict())
         await self._redis.expire(key, self.HEARTBEAT_TTL)
@@ -207,7 +209,7 @@ class DistributedSessionManager:
                 "session_id": session_id,
                 "tenant_id": tenant_id,
                 "gateway_id": self._gateway_id,
-            }
+            },
         )
 
         # Publish session created event
@@ -221,21 +223,21 @@ class DistributedSessionManager:
         tenant_id: str,
     ) -> Optional[Session]:
         """Retrieve session from Redis.
-        
+
         Args:
             session_id: Session identifier
             tenant_id: Tenant ID for isolation
-            
+
         Returns:
             Session object or None if not found/expired
         """
         key = self._session_key(tenant_id, session_id)
         data = await self._redis.hgetall(key)
-        
+
         if not data:
             logger.debug(
                 "Session not found in Redis",
-                extra={"session_id": session_id, "tenant_id": tenant_id}
+                extra={"session_id": session_id, "tenant_id": tenant_id},
             )
             return None
 
@@ -243,8 +245,7 @@ class DistributedSessionManager:
             return Session.from_dict(data)
         except (KeyError, ValueError, json.JSONDecodeError) as e:
             logger.error(
-                "Failed to deserialize session",
-                extra={"session_id": session_id, "error": str(e)}
+                "Failed to deserialize session", extra={"session_id": session_id, "error": str(e)}
             )
             return None
 
@@ -255,12 +256,12 @@ class DistributedSessionManager:
         updates: Dict[str, Any],
     ) -> Optional[Session]:
         """Update session and publish change event.
-        
+
         Args:
             session_id: Session identifier
             tenant_id: Tenant ID for isolation
             updates: Dictionary of fields to update
-            
+
         Returns:
             Updated Session object or None if not found
         """
@@ -290,7 +291,7 @@ class DistributedSessionManager:
 
         logger.info(
             "Session updated in Redis",
-            extra={"session_id": session_id, "updates": list(updates.keys())}
+            extra={"session_id": session_id, "updates": list(updates.keys())},
         )
 
         # Publish session updated event
@@ -300,26 +301,26 @@ class DistributedSessionManager:
 
     async def heartbeat(self, session_id: str, tenant_id: str) -> bool:
         """Refresh session TTL.
-        
+
         Args:
             session_id: Session identifier
             tenant_id: Tenant ID for isolation
-            
+
         Returns:
             True if session exists and TTL was refreshed
         """
         key = self._session_key(tenant_id, session_id)
-        
+
         # Update last_activity and refresh TTL atomically
         client = self._redis.client
-        
+
         exists = await client.exists(key)
         if not exists:
             return False
 
         await client.hset(key, "last_activity", str(time.time()))
         await client.expire(key, self.HEARTBEAT_TTL)
-        
+
         return True
 
     async def close_session(
@@ -328,11 +329,11 @@ class DistributedSessionManager:
         tenant_id: str,
     ) -> bool:
         """Close a session and clean up resources.
-        
+
         Args:
             session_id: Session identifier
             tenant_id: Tenant ID for isolation
-            
+
         Returns:
             True if session was closed
         """
@@ -348,7 +349,7 @@ class DistributedSessionManager:
 
         # Update status before deletion (for pub/sub notification)
         await self._redis.hset(key, session.to_dict())
-        
+
         # Publish close event before cleanup
         await self._publish_event(session_id, "session.closed", {"session_id": session_id})
 
@@ -357,7 +358,7 @@ class DistributedSessionManager:
 
         logger.info(
             "Session closed and cleaned up",
-            extra={"session_id": session_id, "tenant_id": tenant_id}
+            extra={"session_id": session_id, "tenant_id": tenant_id},
         )
 
         return True
@@ -417,12 +418,12 @@ class DistributedSessionManager:
         limit: int = 100,
     ) -> List[Dict[str, Any]]:
         """Get conversation items for a session.
-        
+
         Args:
             session_id: Session identifier
             tenant_id: Tenant ID for isolation
             limit: Maximum items to return
-            
+
         Returns:
             List of conversation items (most recent last)
         """
@@ -430,14 +431,14 @@ class DistributedSessionManager:
         client = self._redis.client
 
         items_json = await client.lrange(key, -limit, -1)
-        
+
         items = []
         for item_str in items_json:
             try:
                 items.append(json.loads(item_str))
             except json.JSONDecodeError:
                 logger.warning("Failed to parse conversation item", extra={"raw": item_str})
-        
+
         return items
 
     async def _publish_event(
@@ -448,22 +449,24 @@ class DistributedSessionManager:
     ) -> None:
         """Publish session event to pub/sub channel."""
         channel = self._pubsub_channel(session_id)
-        message = json.dumps({
-            "type": event_type,
-            "timestamp": time.time(),
-            "gateway_id": self._gateway_id,
-            "data": data,
-        })
+        message = json.dumps(
+            {
+                "type": event_type,
+                "timestamp": time.time(),
+                "gateway_id": self._gateway_id,
+                "data": data,
+            }
+        )
         await self._redis.publish(channel, message)
 
     async def subscribe_to_session(self, session_id: str):
         """Subscribe to session updates.
-        
+
         Returns an async generator that yields session events.
         """
         channel = self._pubsub_channel(session_id)
         pubsub = await self._redis.subscribe(channel)
-        
+
         async for message in pubsub.listen():
             if message["type"] == "message":
                 try:
@@ -486,12 +489,12 @@ class DistributedSessionManager:
 
     async def _cleanup_loop(self) -> None:
         """Background loop to clean up expired sessions.
-        
+
         This loop:
         1. Scans for sessions that haven't had heartbeat in 2x TTL
         2. Emits session.closed events for expired sessions
         3. Cleans up orphaned conversation items
-        
+
         Note: Redis TTL handles key expiration, but we need this for:
         - Emitting events before keys expire
         - Cleaning up related keys (items, audio buffers)
@@ -500,42 +503,42 @@ class DistributedSessionManager:
         while True:
             try:
                 await asyncio.sleep(30)  # Run every 30 seconds
-                
+
                 # Scan for sessions owned by this gateway that may be stale
                 # In production, use Redis keyspace notifications instead
                 client = self._redis.client
-                
+
                 # Scan for session keys (pattern: session:*:sess_*)
                 cursor = 0
                 stale_threshold = time.time() - (self.HEARTBEAT_TTL * 2)
-                
+
                 while True:
                     cursor, keys = await client.scan(
                         cursor=cursor,
                         match=f"{self.HASH_PREFIX}:*:sess_*",
                         count=100,
                     )
-                    
+
                     for key in keys:
                         # Skip config and items keys
                         if ":config" in key or ":items" in key:
                             continue
-                        
+
                         try:
                             data = await client.hgetall(key)
                             if not data:
                                 continue
-                            
+
                             # Check if session is stale
                             last_activity = float(data.get("last_activity", 0))
                             gateway_id = data.get("gateway_id", "")
                             session_id = data.get("id", "")
                             tenant_id = data.get("tenant_id", "")
-                            
+
                             # Only clean up sessions owned by this gateway
                             if gateway_id != self._gateway_id:
                                 continue
-                            
+
                             if last_activity < stale_threshold:
                                 logger.info(
                                     "Cleaning up stale session",
@@ -543,31 +546,31 @@ class DistributedSessionManager:
                                         "session_id": session_id,
                                         "last_activity": last_activity,
                                         "stale_threshold": stale_threshold,
-                                    }
+                                    },
                                 )
-                                
+
                                 # Emit session.closed event
                                 await self._publish_event(
                                     session_id,
                                     "session.closed",
-                                    {"session_id": session_id, "reason": "expired"}
+                                    {"session_id": session_id, "reason": "expired"},
                                 )
-                                
+
                                 # Clean up related keys
                                 items_key = self._items_key(tenant_id, session_id)
                                 await client.delete(key, items_key)
-                                
+
                         except Exception as e:
                             logger.warning(
                                 "Error processing session during cleanup",
-                                extra={"key": key, "error": str(e)}
+                                extra={"key": key, "error": str(e)},
                             )
-                    
+
                     if cursor == 0:
                         break
-                
+
                 logger.debug("Session cleanup cycle completed")
-                
+
             except asyncio.CancelledError:
                 break
             except Exception as e:

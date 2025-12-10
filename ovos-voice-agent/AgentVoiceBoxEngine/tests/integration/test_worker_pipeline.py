@@ -22,7 +22,6 @@ import os
 import sys
 import time
 import uuid
-from typing import List
 
 import pytest
 import pytest_asyncio
@@ -33,13 +32,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from app.config import RedisSettings
 from app.services.redis_client import RedisClient
 from app.services.redis_streams import (
-    RedisStreamsClient,
-    AudioSTTRequest,
-    TTSRequest,
+    GROUP_STT_WORKERS,
     STREAM_AUDIO_STT,
     STREAM_TTS_REQUESTS,
-    GROUP_STT_WORKERS,
-    GROUP_TTS_WORKERS,
+    AudioSTTRequest,
+    RedisStreamsClient,
+    TTSRequest,
 )
 
 # Configure pytest-asyncio mode
@@ -53,17 +51,21 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:16379/0")
 # This is a minimal valid WAV file header + silence
 SAMPLE_AUDIO_WAV = base64.b64encode(
     # WAV header for 16kHz, 16-bit, mono, 1 second
-    b'RIFF' + (36 + 32000).to_bytes(4, 'little') + b'WAVE' +
-    b'fmt ' + (16).to_bytes(4, 'little') +
-    (1).to_bytes(2, 'little') +  # PCM
-    (1).to_bytes(2, 'little') +  # Mono
-    (16000).to_bytes(4, 'little') +  # Sample rate
-    (32000).to_bytes(4, 'little') +  # Byte rate
-    (2).to_bytes(2, 'little') +  # Block align
-    (16).to_bytes(2, 'little') +  # Bits per sample
-    b'data' + (32000).to_bytes(4, 'little') +
-    b'\x00' * 32000  # 1 second of silence
-).decode('ascii')
+    b"RIFF"
+    + (36 + 32000).to_bytes(4, "little")
+    + b"WAVE"
+    + b"fmt "
+    + (16).to_bytes(4, "little")
+    + (1).to_bytes(2, "little")  # PCM
+    + (1).to_bytes(2, "little")  # Mono
+    + (16000).to_bytes(4, "little")  # Sample rate
+    + (32000).to_bytes(4, "little")  # Byte rate
+    + (2).to_bytes(2, "little")  # Block align
+    + (16).to_bytes(2, "little")  # Bits per sample
+    + b"data"
+    + (32000).to_bytes(4, "little")
+    + b"\x00" * 32000  # 1 second of silence
+).decode("ascii")
 
 
 @pytest_asyncio.fixture
@@ -82,10 +84,9 @@ async def streams_client(redis_client):
     return RedisStreamsClient(redis_client)
 
 
-
 class TestSTTWorkerPipeline:
     """Test STT worker: send real audio, verify transcription returned.
-    
+
     Requirements: 10.1, 10.2, 10.4
     """
 
@@ -108,7 +109,7 @@ class TestSTTWorkerPipeline:
     @pytest.mark.asyncio
     async def test_stt_worker_processes_audio(self, redis_client, streams_client):
         """Test STT worker processes audio and returns transcription.
-        
+
         Note: This test requires the STT worker to be running.
         If worker is not running, the test will timeout waiting for response.
         """
@@ -157,7 +158,7 @@ class TestSTTWorkerPipeline:
 
 class TestTTSWorkerPipeline:
     """Test TTS worker: send text, verify audio chunks returned in order.
-    
+
     Requirements: 11.1, 11.2, 11.3
     Property 3: Audio Chunk Ordering - Chunks SHALL be delivered in order.
     """
@@ -182,7 +183,7 @@ class TestTTSWorkerPipeline:
     @pytest.mark.asyncio
     async def test_tts_worker_returns_audio_chunks(self, redis_client, streams_client):
         """Test TTS worker returns audio chunks in order.
-        
+
         Note: This test requires the TTS worker to be running.
         """
         session_id = f"sess_{uuid.uuid4().hex[:16]}"
@@ -238,7 +239,7 @@ class TestTTSWorkerPipeline:
     @pytest.mark.asyncio
     async def test_tts_cancellation(self, redis_client, streams_client):
         """Test TTS cancellation stops synthesis.
-        
+
         Property 5: Cancel Propagation - Cancel SHALL stop work within 50ms.
         """
         session_id = f"sess_{uuid.uuid4().hex[:16]}"
@@ -256,11 +257,11 @@ class TestTTSWorkerPipeline:
 
         # Wait a bit then cancel
         await asyncio.sleep(0.5)
-        cancel_count = await streams_client.cancel_tts(session_id)
+        await streams_client.cancel_tts(session_id)
 
         # Read any remaining chunks
         await asyncio.sleep(0.1)
-        chunks = await streams_client.read_audio_chunks(
+        await streams_client.read_audio_chunks(
             session_id=session_id,
             last_id="0",
             count=100,
@@ -271,17 +272,16 @@ class TestTTSWorkerPipeline:
         await streams_client.cleanup_session_streams(session_id)
 
 
-
 class TestLLMWorkerPipeline:
     """Test LLM worker: send prompt, verify streaming response.
-    
+
     Requirements: 12.1, 12.2, 12.3
     """
 
     @pytest.mark.asyncio
     async def test_llm_request_via_redis(self, redis_client):
         """Test LLM request/response via Redis streams.
-        
+
         Note: LLM worker uses external APIs, so this test verifies
         the message passing infrastructure works.
         """
@@ -304,9 +304,7 @@ class TestLLMWorkerPipeline:
             {
                 "session_id": session_id,
                 "tenant_id": tenant_id,
-                "messages": json.dumps([
-                    {"role": "user", "content": "Say hello in one word."}
-                ]),
+                "messages": json.dumps([{"role": "user", "content": "Say hello in one word."}]),
                 "model": "gpt-3.5-turbo",
                 "temperature": "0.7",
                 "max_tokens": "50",
@@ -319,7 +317,7 @@ class TestLLMWorkerPipeline:
 
 class TestWorkerConsumerGroups:
     """Test Redis Streams consumer group behavior.
-    
+
     Requirements: 10.1, 11.1
     """
 
@@ -343,10 +341,7 @@ class TestWorkerConsumerGroups:
             assert len(groups) >= 1
 
             # Find our consumer group
-            stt_group = next(
-                (g for g in groups if g["name"] == GROUP_STT_WORKERS),
-                None
-            )
+            stt_group = next((g for g in groups if g["name"] == GROUP_STT_WORKERS), None)
             assert stt_group is not None
         except Exception as e:
             pytest.skip(f"Could not get consumer group info: {e}")
@@ -376,7 +371,7 @@ class TestWorkerConsumerGroups:
 
 class TestEndToEndPipeline:
     """Test end-to-end pipeline integration.
-    
+
     Note: Full end-to-end tests require all workers running.
     These tests verify the infrastructure is correctly wired.
     """

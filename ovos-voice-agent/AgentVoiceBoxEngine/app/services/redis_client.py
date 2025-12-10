@@ -15,7 +15,7 @@ from typing import Any, Optional
 
 import redis.asyncio as aioredis
 from redis.asyncio.connection import ConnectionPool
-from redis.exceptions import ConnectionError, TimeoutError, RedisError
+from redis.exceptions import ConnectionError, RedisError, TimeoutError
 
 # Import RedisSettings - try worker_config first to avoid Flask dependencies
 try:
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 class RedisClient:
     """Async Redis client with connection pooling and automatic reconnection.
-    
+
     This client wraps redis-py's async client with:
     - Connection pooling (default 50 connections)
     - Automatic reconnection with exponential backoff
@@ -59,12 +59,12 @@ class RedisClient:
                 decode_responses=True,
             )
             self._client = aioredis.Redis(connection_pool=self._pool)
-            
+
             # Verify connection
             await self._client.ping()
             self._connected = True
             logger.info("Redis connection established", extra={"url": self._settings.url})
-            
+
         except (ConnectionError, TimeoutError) as e:
             logger.error("Failed to connect to Redis", extra={"error": str(e)})
             raise
@@ -81,11 +81,11 @@ class RedisClient:
         if self._client:
             await self._client.aclose()
             self._client = None
-        
+
         if self._pool:
             await self._pool.disconnect()
             self._pool = None
-        
+
         self._connected = False
         logger.info("Redis connection closed")
 
@@ -102,7 +102,7 @@ class RedisClient:
     @property
     def client(self) -> aioredis.Redis:
         """Get the underlying Redis client.
-        
+
         Raises:
             RuntimeError: If not connected.
         """
@@ -114,7 +114,7 @@ class RedisClient:
         """Attempt reconnection with exponential backoff."""
         backoff = 1.0
         max_backoff = 60.0
-        
+
         while not self._connected:
             try:
                 logger.info("Attempting Redis reconnection", extra={"backoff": backoff})
@@ -124,7 +124,7 @@ class RedisClient:
             except (ConnectionError, TimeoutError) as e:
                 logger.warning(
                     "Redis reconnection failed, retrying",
-                    extra={"error": str(e), "next_attempt_seconds": backoff}
+                    extra={"error": str(e), "next_attempt_seconds": backoff},
                 )
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, max_backoff)
@@ -245,7 +245,7 @@ _redis_client: Optional[RedisClient] = None
 
 def get_redis_client() -> RedisClient:
     """Get the global Redis client instance.
-    
+
     Raises:
         RuntimeError: If client not initialized.
     """

@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional
 
 from .redis_client import RedisClient
 
@@ -103,6 +103,7 @@ return {max_requests - req_count, max_tokens - tok_count, window}
 @dataclass
 class RateLimitConfig:
     """Rate limit configuration."""
+
     requests_per_minute: int = 100
     tokens_per_minute: int = 100000
     window_ms: int = 60000  # 1 minute in milliseconds
@@ -111,6 +112,7 @@ class RateLimitConfig:
 @dataclass
 class RateLimitResult:
     """Result of a rate limit check."""
+
     allowed: bool
     requests_remaining: int
     tokens_remaining: int
@@ -127,10 +129,10 @@ class RateLimitResult:
 
 class DistributedRateLimiter:
     """Redis-based sliding window rate limiter.
-    
+
     Uses Lua scripts for atomic check-and-consume operations across
     distributed gateway instances.
-    
+
     Features:
     - Sliding window algorithm for accurate rate limiting
     - Atomic operations via Lua scripts (<5ms latency)
@@ -153,7 +155,7 @@ class DistributedRateLimiter:
 
     def _rate_limit_key(self, tenant_id: str, identifier: str) -> str:
         """Generate namespaced rate limit key.
-        
+
         Args:
             tenant_id: Tenant ID for isolation
             identifier: Additional identifier (e.g., session_id, user_id)
@@ -162,7 +164,7 @@ class DistributedRateLimiter:
 
     def set_tenant_limits(self, tenant_id: str, config: RateLimitConfig) -> None:
         """Set custom rate limits for a tenant.
-        
+
         Args:
             tenant_id: Tenant ID
             config: Custom rate limit configuration
@@ -174,7 +176,7 @@ class DistributedRateLimiter:
                 "tenant_id": tenant_id,
                 "requests_per_minute": config.requests_per_minute,
                 "tokens_per_minute": config.tokens_per_minute,
-            }
+            },
         )
 
     def get_tenant_config(self, tenant_id: str) -> RateLimitConfig:
@@ -189,13 +191,13 @@ class DistributedRateLimiter:
         tokens: int = 0,
     ) -> RateLimitResult:
         """Atomically check limits and consume quota.
-        
+
         Args:
             tenant_id: Tenant ID for isolation
             identifier: Additional identifier (e.g., session_id)
             requests: Number of requests to consume
             tokens: Number of tokens to consume
-            
+
         Returns:
             RateLimitResult with allowed status and remaining quota
         """
@@ -230,7 +232,7 @@ class DistributedRateLimiter:
                         "identifier": identifier,
                         "requests_remaining": requests_remaining,
                         "tokens_remaining": tokens_remaining,
-                    }
+                    },
                 )
 
             return RateLimitResult(
@@ -243,7 +245,7 @@ class DistributedRateLimiter:
         except Exception as e:
             logger.error(
                 "Rate limit check failed, failing open",
-                extra={"tenant_id": tenant_id, "error": str(e)}
+                extra={"tenant_id": tenant_id, "error": str(e)},
             )
             # Fail open - allow request but log error
             return RateLimitResult(
@@ -259,11 +261,11 @@ class DistributedRateLimiter:
         identifier: str,
     ) -> RateLimitResult:
         """Get current limit status without consuming.
-        
+
         Args:
             tenant_id: Tenant ID for isolation
             identifier: Additional identifier
-            
+
         Returns:
             RateLimitResult with current remaining quota
         """
@@ -291,10 +293,7 @@ class DistributedRateLimiter:
             )
 
         except Exception as e:
-            logger.error(
-                "Get limits failed",
-                extra={"tenant_id": tenant_id, "error": str(e)}
-            )
+            logger.error("Get limits failed", extra={"tenant_id": tenant_id, "error": str(e)})
             return RateLimitResult(
                 allowed=True,
                 requests_remaining=config.requests_per_minute,
@@ -304,11 +303,11 @@ class DistributedRateLimiter:
 
     async def reset_limits(self, tenant_id: str, identifier: str) -> bool:
         """Reset rate limits for a specific key.
-        
+
         Args:
             tenant_id: Tenant ID
             identifier: Additional identifier
-            
+
         Returns:
             True if limits were reset
         """
@@ -316,21 +315,19 @@ class DistributedRateLimiter:
         try:
             await self._redis.delete(f"{key}:req", f"{key}:tok")
             logger.info(
-                "Rate limits reset",
-                extra={"tenant_id": tenant_id, "identifier": identifier}
+                "Rate limits reset", extra={"tenant_id": tenant_id, "identifier": identifier}
             )
             return True
         except Exception as e:
             logger.error(
-                "Failed to reset rate limits",
-                extra={"tenant_id": tenant_id, "error": str(e)}
+                "Failed to reset rate limits", extra={"tenant_id": tenant_id, "error": str(e)}
             )
             return False
 
 
 def count_tokens(text: str) -> int:
     """Approximate token count for rate limiting.
-    
+
     Uses simple heuristic: ~4 characters per token.
     For production, consider using tiktoken for accurate counts.
     """
